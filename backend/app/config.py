@@ -37,6 +37,20 @@ class Settings(BaseSettings):
     # Integrity
     compute_codebase_hash_on_startup: bool = Field(default=True, description="Compute codebase hash at startup")
 
+    # Lightweight pilot auth (header-based, non-production)
+    admin_emails: list[str] = Field(
+        default_factory=list,
+        description="Emails treated as admins when using header-based pilot auth",
+    )
+    provider_emails: list[str] = Field(
+        default_factory=list,
+        description="Emails treated as data providers in pilot auth",
+    )
+    researcher_emails: list[str] = Field(
+        default_factory=list,
+        description="Emails treated as researchers in pilot auth",
+    )
+
     # Optional: Blockchain anchoring (Phase 1)
     polygon_rpc_url: str | None = Field(default=None, description="Polygon RPC URL for anchoring")
     polygon_private_key: str | None = Field(default=None, description="Private key for anchoring (never commit)")

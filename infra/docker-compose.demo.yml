@@ -1,0 +1,41 @@
+# SPDX-License-Identifier: Apache-2.0
+# Demo stack: backend + frontend + persistent data. Run seed once after backend is up.
+# Usage: docker compose -f infra/docker-compose.demo.yml up -d
+#        docker compose -f infra/docker-compose.demo.yml run --rm seed
+version: "3.8"
+services:
+  backend:
+    build: ../backend
+    ports:
+      - "8000:8000"
+    volumes:
+      - demo_data:/app/data
+      - demo_uploads:/app/uploads
+    environment:
+      - SECURECOLLAB_DATABASE_URL=sqlite:///./data/secure_collab.db
+      - SECURECOLLAB_UPLOADS_DIR=/app/uploads
+
+  frontend:
+    build: ../frontend
+    ports:
+      - "3000:3000"
+    environment:
+      - NEXT_PUBLIC_API_URL=http://localhost:8000
+    depends_on:
+      - backend
+
+  seed:
+    build: ../backend
+    command: ["python", "-m", "scripts.seed_demo"]
+    volumes:
+      - demo_data:/app/data
+      - demo_uploads:/app/uploads
+    environment:
+      - SECURECOLLAB_DATABASE_URL=sqlite:///./data/secure_collab.db
+      - SECURECOLLAB_UPLOADS_DIR=/app/uploads
+    depends_on:
+      - backend
+
+volumes:
+  demo_data:
+  demo_uploads:

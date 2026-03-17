@@ -4,6 +4,7 @@
 import { Badge } from "@/components/Badge";
 import { Modal } from "@/components/Modal";
 import { SlideOver } from "@/components/SlideOver";
+import { ErrorBanner } from "@/components/ErrorBanner";
 import { useEmail } from "@/lib/email-context";
 import {
   approveJob,
@@ -104,7 +105,7 @@ export default function MyDatasetsPage() {
         <div>
           <h1 className="text-2xl font-semibold text-slate-900">My Datasets</h1>
           <p className="mt-1 text-slate-600">
-            Manage your uploaded encrypted datasets and access.
+            Manage your uploaded encrypted datasets and access. This proof-of-concept is intended for synthetic or test data only – do not upload real patient or production data.
           </p>
         </div>
         <button
@@ -115,6 +116,8 @@ export default function MyDatasetsPage() {
           Upload New Dataset
         </button>
       </div>
+
+      {uploadError && <ErrorBanner message={uploadError} />}
 
       {loading ? (
         <p className="mt-8 text-sm text-slate-500">Loading…</p>
@@ -194,9 +197,12 @@ export default function MyDatasetsPage() {
           setUploadOpen(false);
           setUploadError(null);
         }}
-        title="Upload New Dataset"
+        title="Upload New Dataset (synthetic/test data only)"
       >
         <form onSubmit={handleUpload} className="space-y-4">
+          <p className="text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+            This proof-of-concept deployment is intended for experiments with synthetic or test data only. Do not upload real patient data or any data that is subject to regulatory protection.
+          </p>
           <div>
             <label className="block text-sm font-medium text-slate-700">
               Name

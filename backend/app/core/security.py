@@ -6,9 +6,10 @@ import hashlib
 import logging
 import re
 import uuid
+from dataclasses import dataclass
 from pathlib import Path
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, HTTPException, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
@@ -94,3 +95,62 @@ def sha3_256_hex(*parts: bytes | str) -> str:
     for p in parts:
         h.update(p.encode("utf-8") if isinstance(p, str) else p)
     return h.hexdigest()
+
+
+@dataclass
+class AuthUser:
+    """Lightweight auth context for pilots (header-based, no sessions)."""
+
+    email: str
+    role: str
+
+
+def _resolve_role(email: str) -> str:
+    """
+    Map email to a simple role based on config lists.
+
+    Order: admin > provider > researcher > guest.
+    """
+    from app.config import settings
+
+    if email in settings.admin_emails:
+        return "admin"
+    if email in settings.provider_emails:
+        return "provider"
+    if email in settings.researcher_emails:
+        return "researcher"
+    return "guest"
+
+
+def get_current_user(request: Request) -> AuthUser:
+    """
+    Extract user from X-User-Email header.
+
+    This is intentionally lightweight and header-based, intended for pilots and demos.
+    It does not implement sessions, passwords, or production-grade authentication.
+    """
+    email = (request.headers.get("X-User-Email") or "").strip()
+    role = _resolve_role(email) if email else "anonymous"
+    return AuthUser(email=email, role=role)
+
+
+def require_admin(request: Request) -> AuthUser:
+    """
+    Require that the caller is configured as admin.
+
+    - If the header is missing: 401
+    - If the email is not in admin_emails: 403
+    """
+    email = (request.headers.get("X-User-Email") or "").strip()
+    if not email:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Missing X-User-Email header",
+        )
+    role = _resolve_role(email)
+    if role != "admin":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Admin role required",
+        )
+    return AuthUser(email=email, role=role)

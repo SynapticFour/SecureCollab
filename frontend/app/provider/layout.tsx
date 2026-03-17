@@ -10,6 +10,7 @@ const providerNav = [
   { href: "/provider/datasets", label: "My Datasets" },
   { href: "/provider/pending", label: "Pending Requests" },
   { href: "/provider/access", label: "Access Management" },
+  { href: "/provider/system/status", label: "System Status" },
 ];
 
 export default function ProviderLayout({

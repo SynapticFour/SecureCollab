@@ -11,7 +11,7 @@ This guide is for institutions that want to verify that the instance they use ru
   - `backend/integrity.py` – Codebase hash computation
   - `backend/sdk.py` – Client-side key generation, encryption, secret key storage
 
-Review these files (and dependencies in `backend/requirements.txt`) to satisfy yourself that the described guarantees hold.
+Review these files (and dependencies in `backend/requirements.txt`) to understand the intended security properties and to assess whether they are appropriate for your own regulatory and contractual context. This documentation stellt keine Rechtsberatung dar.
 
 ## Step 2: Reproduce the Build
 

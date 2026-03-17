@@ -25,6 +25,7 @@ import { CommitmentHash } from "@/components/CommitmentHash";
 import { AuditEntryCard } from "@/components/AuditEntryCard";
 import { Modal } from "@/components/Modal";
 import { Badge } from "@/components/Badge";
+import { ErrorBanner } from "@/components/ErrorBanner";
 
 const TABS = ["Overview", "Participants", "Datasets", "Analysis", "Audit Trail", "Protocol Report"];
 
@@ -191,6 +192,10 @@ export default function StudyDashboardPage() {
         </div>
       </div>
 
+      {error && (
+        <ErrorBanner message={error} />
+      )}
+
       {/* Status banner */}
       <div className={`mt-6 rounded-xl border p-4 ${isActive ? "border-success/30 bg-success/5" : "border-warning/30 bg-warning/5"}`}>
         {isActive ? (
@@ -285,7 +290,7 @@ export default function StudyDashboardPage() {
               </button>
             </div>
             <p className="text-sm text-slate-600">
-              Use the SecureCollab SDK to encrypt your data locally first, then upload the .bin file here.
+              Use the SecureCollab SDK to encrypt your data locally first, then upload the .bin file here. This proof-of-concept deployment is intended for synthetic or test data only – do not upload real patient or production data.
             </p>
             <table className="w-full text-left text-sm">
               <thead>
@@ -315,9 +320,9 @@ export default function StudyDashboardPage() {
               <p className="mt-4 text-slate-500">No datasets yet. Upload one using the SDK and then this page.</p>
             )}
 
-            <Modal open={uploadModalOpen} onClose={() => { setUploadModalOpen(false); setCommitmentAfterUpload(""); }} title="Upload Encrypted Dataset">
+            <Modal open={uploadModalOpen} onClose={() => { setUploadModalOpen(false); setCommitmentAfterUpload(""); }} title="Upload Encrypted Dataset (synthetic/test data only)">
               <p className="text-sm text-slate-600">
-                Use the SecureCollab SDK to encrypt your data locally first, then upload the .bin file here.
+                Use the SecureCollab SDK to encrypt your data locally first, then upload the .bin file here. Only synthetic or test data should be used in this proof-of-concept deployment.
               </p>
               <div className="mt-4">
                 <label className="block text-sm font-medium">Dataset name</label>
@@ -478,7 +483,7 @@ export default function StudyDashboardPage() {
           <div className="rounded-xl border border-slate-200 bg-white p-6">
             <h2 className="font-semibold text-slate-900">Protocol Report</h2>
             <div className="mt-4 rounded-lg bg-slate-100 p-4 text-sm text-slate-700">
-              <p className="font-medium">This study was conducted under cryptographic guarantees.</p>
+              <p className="font-medium">This study used the cryptographic mechanisms described in the documentation; this is not a legal guarantee or compliance statement.</p>
               <p className="mt-2">The platform operator had access to: encrypted data only, metadata, audit trail entries.</p>
               <p className="mt-1">The platform operator could not access: raw patient data, private key shares, computation results before approval.</p>
             </div>

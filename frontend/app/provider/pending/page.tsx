@@ -2,6 +2,7 @@
 "use client";
 
 import { Badge } from "@/components/Badge";
+import { ErrorBanner } from "@/components/ErrorBanner";
 import { useEmail } from "@/lib/email-context";
 import {
   approveJob,
@@ -38,6 +39,7 @@ export default function PendingRequestsPage() {
     jobId: number;
     result: number;
   } | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     if (!email) return;
@@ -69,6 +71,7 @@ export default function PendingRequestsPage() {
       const res = await approveJob(job.id);
       setApprovedResult({ jobId: job.id, result: res.result });
       await load();
+      setError(null);
     } finally {
       setApprovingId(null);
     }
@@ -79,6 +82,9 @@ export default function PendingRequestsPage() {
     try {
       await rejectJob(job.id);
       await load();
+      setError(null);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Reject failed");
     } finally {
       setRejectingId(null);
     }
@@ -92,6 +98,7 @@ export default function PendingRequestsPage() {
       <p className="mt-1 text-slate-600">
         Review and approve or reject analysis requests from researchers.
       </p>
+      {error && <ErrorBanner message={error} />}
       {loading ? (
         <p className="mt-8 text-sm text-slate-500">Loading…</p>
       ) : pending.length === 0 ? (

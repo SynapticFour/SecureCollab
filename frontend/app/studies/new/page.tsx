@@ -39,6 +39,7 @@ export default function NewStudyPage() {
   const [participantEmails, setParticipantEmails] = useState<string[]>([""]);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
+  const [createdStudyId, setCreatedStudyId] = useState<number | null>(null);
 
   const toggleAlgorithm = (id: string) => {
     setAllowedAlgorithms((prev) =>
@@ -71,7 +72,9 @@ export default function NewStudyPage() {
         threshold_t: Math.min(thresholdT, thresholdN),
         allowed_algorithms: allowedAlgorithms.length ? allowedAlgorithms : ALGORITHMS.map((a) => a.id),
       });
-      router.push(`/studies/${study_id}`);
+      setCreatedStudyId(study_id);
+      // Stay on the review step so that the user can copy instructions and then go to the dashboard.
+      setStep(4);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Create failed");
     } finally {
@@ -266,15 +269,78 @@ export default function NewStudyPage() {
               <div><dt className="font-medium text-slate-500">Threshold</dt><dd className="text-slate-900">{thresholdT} of {thresholdN}</dd></div>
               <div><dt className="font-medium text-slate-500">Algorithms</dt><dd className="text-slate-900">{allowedAlgorithms.length ? allowedAlgorithms.join(", ") : "All"}</dd></div>
             </dl>
-            {error && <p className="mt-4 text-sm text-red-600">{error}</p>}
-            <button
-              type="button"
-              onClick={handleCreate}
-              disabled={submitting || !name.trim() || !creatorEmail.trim()}
-              className="mt-6 rounded-lg bg-primary px-4 py-2 font-medium text-white hover:bg-primary-hover disabled:opacity-50"
-            >
-              {submitting ? "Creating…" : "Create Study"}
-            </button>
+            {error && <p className="mt-4 text-sm text-red-600 whitespace-pre-line">{error}</p>}
+            {!createdStudyId && (
+              <button
+                type="button"
+                onClick={handleCreate}
+                disabled={submitting || !name.trim() || !creatorEmail.trim()}
+                className="mt-6 rounded-lg bg-primary px-4 py-2 font-medium text-white hover:bg-primary-hover disabled:opacity-50"
+              >
+                {submitting ? "Creating…" : "Create Study"}
+              </button>
+            )}
+            {createdStudyId && (
+              <div className="mt-6 space-y-4 border-t border-slate-200 pt-4">
+                <div className="rounded-lg bg-success/10 p-3 text-sm text-success">
+                  <p className="font-semibold">Study created successfully.</p>
+                  <p className="mt-1">
+                    Study ID: <code className="font-mono text-xs">{createdStudyId}</code>
+                  </p>
+                </div>
+                <div>
+                  <h3 className="text-sm font-semibold text-slate-900">Next steps</h3>
+                  <ol className="mt-2 list-decimal space-y-1 pl-5 text-sm text-slate-700">
+                    <li>Open the study dashboard to finalize the protocol and see activation status.</li>
+                    <li>Share the Study ID and the invitation text below with participating institutions.</li>
+                    <li>Each institution should generate a key share with the SDK, submit schema &amp; dry-run, then you can activate the study and request analyses.</li>
+                  </ol>
+                </div>
+                <div>
+                  <h3 className="text-sm font-semibold text-slate-900">Invitation text (example)</h3>
+                  <p className="mt-1 text-xs text-slate-500">
+                    You can copy and adapt this text and send it via email to each participant institution.
+                  </p>
+                  <pre className="mt-2 max-h-64 overflow-auto rounded-lg bg-slate-950/90 p-3 text-xs text-slate-50">
+{`Subject: Invitation to join SecureCollab study "${name || "Your Study"}"
+
+Dear colleague,
+
+you have been invited to participate in a SecureCollab study.
+
+Study ID: ${createdStudyId}
+Coordinator institution: ${institutionName || "Your institution"}
+
+What you need to do on your side (proof-of-concept workflow):
+
+1) Generate a key share locally (do NOT send any secret keys):
+
+   python backend/sdk.py generate-key-share --email YOUR_INSTITUTION_EMAIL
+
+2) Submit your schema and run a synthetic dry-run for this study:
+
+   python backend/sdk.py negotiate-schema --study-id ${createdStudyId} --csv your_synthetic_data.csv --email YOUR_INSTITUTION_EMAIL
+   python backend/sdk.py dry-run --study-id ${createdStudyId} --csv your_synthetic_data.csv --email YOUR_INSTITUTION_EMAIL
+
+3) Once all institutions have completed schema & dry-run, the coordinator can activate the study and request encrypted computations.
+
+This is a proof-of-concept deployment intended only for synthetic or test data, not for real patient data.`}
+                  </pre>
+                </div>
+                <div className="flex items-center justify-between">
+                  <p className="text-xs text-slate-500">
+                    You can always revisit these instructions in your own documentation or adapt them to your processes.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => router.push(`/studies/${createdStudyId}`)}
+                    className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white hover:bg-primary-hover"
+                  >
+                    Go to Study Dashboard
+                  </button>
+                </div>
+              </div>
+            )}
           </>
         )}
 

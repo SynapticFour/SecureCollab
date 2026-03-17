@@ -1,15 +1,32 @@
 # SPDX-License-Identifier: Apache-2.0
 """
 ================================================================================
-SecureCollab – Multi-Party Clinical Data Analysis
+SecureCollab – Multi-Party Clinical Data Analysis (LEGACY MONOLITH)
 ================================================================================
+
+HINWEIS / NOTICE (WICHTIG):
+---------------------------
+Diese Datei (`backend/main.py`) ist ein **älteres, monolithisches Backend** und
+gehört nicht mehr zur aktiven Anwendung, wenn `uvicorn app.main:app` verwendet wird.
+Sie wird nur zu Referenz- und Archivzwecken im Repository gehalten.
+
+Alle aktuellen sicherheitsrelevanten und rechtlich vorsichtigen Beschreibungen
+befinden sich in:
+
+- `backend/app/main.py` (aktuelle FastAPI-App),
+- `SECURITY.md`,
+- `LEGAL_NOTES.md`,
+- `docs/DECISION_MAKER.md`.
+
+Die folgenden Kommentare und Beschreibungen in dieser Datei sind historisch und
+sollten **nicht** als aktuelle Zusagen oder rechtliche Aussagen interpretiert werden.
 
 WAS IST SECURECOLLAB?
 ---------------------
 SecureCollab ist eine Plattform, auf der mehrere Institutionen gemeinsam auf
 kombinierten klinischen Daten rechnen können, ohne dass irgendeine Partei –
 auch der Plattformbetreiber nicht – die Rohdaten einer anderen Partei je sieht.
-Das wird nicht durch Verträge garantiert, sondern durch Mathematik.
+Das ursprüngliche Design stützt sich primär auf etablierte Kryptographie.
 
 WARUM?
 ------
@@ -22,7 +39,7 @@ wertvoller Patientendaten, die kaum ausgetauscht werden, weil:
 Unser Ansatz kombiniert drei kryptographische Techniken:
 - Homomorphic Encryption (HE): Berechnungen auf verschlüsselten Daten
 - Threshold Key Generation (DKG): Der vollständige Schlüssel existiert nie an einem Ort
-- Cryptographic Commitment: Beweisbare Garantie, welcher Schlüssel verwendet wurde
+- Cryptographic Commitment: kryptographische Bindung daran, welcher Schlüssel verwendet wurde
 
 KRYPTOGRAPHISCHES MODELL
 ------------------------
@@ -51,8 +68,8 @@ WAS SIEHT DER PLATTFORMBETREIBER?
 - Nicht sichtbar: Rohdaten, private Key Shares, entschlüsselte Ergebnisse vor
   Freigabe, Inhalte der verschlüsselten Dateien.
 
-ENDPOINTS & GARANTIEN
----------------------
+ENDPOINTS & DESIGNZIELE (historische Kommentare)
+------------------------------------------------
 - POST /studies/create: Erstellt Study (draft), Audit: study_created.
 - POST /studies/{id}/join: Teilnehmer liefert Public Key Share; bei Vollzahl
   wird Study aktiv, Public Key Fingerprint gesetzt, Audit: participant_joined/study_activated.
@@ -1219,7 +1236,7 @@ def studies_create(body: StudyCreate):
 # Warum: Bei HE kann niemand Daten nach dem Upload prüfen. Falsches Mapping liefert
 # mathematisch korrekte aber inhaltlich falsche Ergebnisse. Schema muss kryptographisch
 # erzwungene Precondition sein.
-# Garantie: protocol_hash bindet das Schema; nach Finalize unveränderbar.
+# Aussage über das Protokolldesign (kein Rechtsversprechen): protocol_hash bindet das Schema; nach Finalize unveränderbar.
 # NICHT garantiert: Dass lokale Daten dem Schema entsprechen (dafür schema/submit + dry run).
 
 
@@ -1386,7 +1403,7 @@ def studies_public_key(study_id: int):
 # -----------------------------------------------------------------------------
 # Was: Institution reicht lokale Schema-Beschreibung und Mapping ein; Server prüft Kompatibilität.
 # Warum: Beweisbar dasselbe Schema – keine falschen Spalten nach Upload.
-# Garantie: institution_signature bindet Mapping + protocol_hash + Email; im Audit bei activate.
+# Aussage über das Protokolldesign (kein Rechtsversprechen): institution_signature bindet Mapping + protocol_hash + Email; im Audit bei activate.
 # NICHT garantiert: Dass die tatsächlichen Daten dem Mapping entsprechen (Dry Run empfohlen).
 
 
@@ -1396,7 +1413,7 @@ def studies_schema_submit(study_id: int, body: SchemaSubmit):
     Institution reicht lokales Schema und vorgeschlagenes Mapping ein.
     Was: Server prüft Kompatibilität (required columns, Typen, Ranges), speichert institution_signature.
     Warum: Precondition für Aktivierung – beweisbar dasselbe Schema (institution_signature im Audit bei activate).
-    Garantie: institution_signature = SHA3-256(mapping + protocol_hash + email); nachträglich nicht abstreitbar.
+    Aussage über das Protokolldesign (kein Rechtsversprechen): institution_signature = SHA3-256(mapping + protocol_hash + email); nachträglich nicht abstreitbar.
     NICHT garantiert: Dass die tatsächlichen Daten dem Mapping entsprechen (Dry Run empfohlen).
     """
     with Session(engine) as session:
@@ -1451,7 +1468,7 @@ def studies_synthetic_upload(
     Institution lädt synthetische (Klartext-) CSV hoch.
     Was: Server validiert gegen Protocol (Spalten, Typen, minimum_rows), speichert validation_result.
     Warum: Precondition für Aktivierung – alle Teilnehmer müssen Dry Run absolvieren.
-    Garantie: Markiert Dry Run als completed; Voraussetzung für can_activate.
+    Aussage über das Protokolldesign (kein Rechtsversprechen): Markiert Dry Run als completed; Voraussetzung für can_activate.
     NICHT garantiert: Vertraulichkeit – Daten sind Klartext; nur synthetische Testdaten verwenden.
     """
     with Session(engine) as session:
@@ -1510,7 +1527,7 @@ def studies_activation_status(study_id: int):
     Gibt zurück ob die Study aktiviert werden kann.
     Was: Prüft protocol_finalized, all_schemas_compatible, dry_run_completed, all_keys_submitted.
     Warum: Aktivierung nur wenn alle Schema-Preconditions erfüllt sind – keine Daten ohne vereinbartes Schema.
-    Garantie: Kann nur true sein wenn alle Teilnehmer kompatibles Schema eingereicht und Dry Run gemacht haben.
+    Aussage über das Protokolldesign (kein Rechtsversprechen): Kann nur true sein wenn alle Teilnehmer kompatibles Schema eingereicht und Dry Run gemacht haben.
     """
     with Session(engine) as session:
         study = session.get(Study, study_id)
@@ -1544,7 +1561,7 @@ def studies_activate(study_id: int, actor_email: str = ""):
     Aktiviert die Study nur wenn ALLE Preconditions erfüllt sind.
     Was: Setzt status=active, setzt combined_public_key; schreibt schema_signatures in Audit Log.
     Warum: Beweisbar dasselbe Schema – schema_signatures beweisen akzeptiertes Mapping pro Institution.
-    Garantie: Aktivierung nur bei protocol_finalized + alle schemas compatible + alle dry_run + alle keys.
+    Aussage über das Protokolldesign (kein Rechtsversprechen): Aktivierung nur bei protocol_finalized + alle schemas compatible + alle dry_run + alle keys.
     NICHT garantiert: Dass Teilnehmer ihre echten Daten korrekt mappen (operationale Sorgfalt).
     """
     with Session(engine) as session:

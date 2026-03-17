@@ -1,6 +1,7 @@
 # SecureCollab
 
-**Projektdokumentation – Stand: Hobby/Proof of Concept**
+**Projektdokumentation – Stand: Hobby/Proof of Concept (keine Rechtsberatung)**  
+Diese Datei beschreibt technische und produktbezogene Aspekte. Sie ersetzt keine individuelle rechtliche oder regulatorische Bewertung; siehe auch `LEGAL_NOTES.md` und `docs/DECISION_MAKER.md`.
 
 ---
 
@@ -11,12 +12,13 @@
 3. [Kryptographisches Modell](#kryptographisches-modell)
 4. [Was die Plattform sehen kann – und was nicht](#was-die-plattform-sehen-kann--und-was-nicht)
 5. [Trust Model: Warum du uns nicht vertrauen musst](#trust-model-warum-du-uns-nicht-vertrauen-musst)
-6. [Wettbewerbslandschaft & Positionierung](#wettbewerbslandschaft--positionierung)
-7. [Roadmap](#roadmap)
-8. [Schnell skalierbar: Was bereits produktionsreif designed wurde](#schnell-skalierbar-was-bereits-produktionsreif-designed-wurde)
-9. [Technischer Stack](#technischer-stack)
-10. [Lokale Entwicklung](#lokale-entwicklung)
-11. [Kontakt & Interesse](#kontakt--interesse)
+6. [Rechtlicher Rahmen & Sicherheitshinweise](#rechtlicher-rahmen--sicherheitshinweise)
+7. [Wettbewerbslandschaft & Positionierung](#wettbewerbslandschaft--positionierung)
+8. [Roadmap](#roadmap)
+9. [Schnell skalierbar: Was bereits produktionsreif designed wurde](#schnell-skalierbar-was-bereits-produktionsreif-designed-wurde)
+10. [Technischer Stack](#technischer-stack)
+11. [Lokale Entwicklung](#lokale-entwicklung)
+12. [Kontakt & Interesse](#kontakt--interesse)
 
 ---
 
@@ -24,7 +26,7 @@
 
 SecureCollab ist eine Plattform für verschlüsselte Multi-Party Datenkollaboration, primär für klinische und pharmazeutische Forschung. Sie ermöglicht es mehreren Institutionen, gemeinsam auf kombinierten Datensätzen zu rechnen – ohne dass irgendeine Partei die Rohdaten einer anderen je sieht.
 
-Das wird nicht durch Verträge garantiert, sondern durch Mathematik: **Homomorphic Encryption (HE)** erlaubt Berechnungen auf verschlüsselten Daten. Der Entschlüsselungsschlüssel existiert nie vollständig an einem Ort. Jede Operation ist kryptographisch beweisbar und im Audit Trail verankert.
+Die Sicherheitseigenschaften stützen sich nicht primär auf vertragliche Zusicherungen, sondern auf etablierte Kryptographie: **Homomorphic Encryption (HE)** erlaubt Berechnungen auf verschlüsselten Daten. Der Entschlüsselungsschlüssel existiert nie vollständig an einem Ort. Jede Operation ist kryptographisch beweisbar und im Audit Trail verankert.
 
 ### Aktueller Status
 
@@ -42,7 +44,7 @@ Das hat konkrete Kosten: verzögerte Studien, kleinere Kohorten, schlechtere sta
 
 Existierende Lösungen adressieren das nur teilweise. **Data Transfer Agreements (DTAs)** und **Federated Queries** setzen voraus, dass Daten entweder physisch übertragen oder dass mindestens eine Partei Zugriff auf Metadaten oder Abfrageergebnisse hat. **Data Clean Rooms** reduzieren das Risiko, erfordern aber weiterhin Vertrauen in die Betreiber und bieten keine mathematische Garantie, dass Rohdaten nie sichtbar werden. **Trusted Third Party**-Ansätze verschieben das Problem: Wer kontrolliert den Dritten? Wer haftet bei einem Breach? Für viele Institutionen ist „einfach jemandem vertrauen“ keine akzeptable Antwort – besonders wenn es um Patientendaten geht.
 
-SecureCollab löst das, indem die Plattform **mathematisch ausgeschlossen** wird: Sie sieht nur verschlüsselte Daten und Metadaten. Rohdaten und Schlüssel bleiben verteilt bei den Institutionen.
+SecureCollab reduziert den notwendigen Vertrauensumfang, indem die Plattform nur mit verschlüsselten Daten und Metadaten arbeitet: Sie sieht nur verschlüsselte Daten und Metadaten. Rohdaten und Schlüssel bleiben verteilt bei den Institutionen.
 
 ---
 
@@ -68,7 +70,7 @@ Entschlüsseln: braucht t von n Key Shares
 
 - **Kein einzelner Teilnehmer** kann alleine entschlüsseln.
 - **Die Plattform** hat keinen einzigen Key Share – sie speichert nur den kombinierten Public Key.
-- Es ist **mathematisch unmöglich** für die Plattform, Daten zu sehen.
+- Nach dem gewählten kryptographischen Modell und bei korrekter Implementierung ist es für die Plattform nach heutigem Stand der Technik praktisch nicht möglich, Rohdaten zu sehen.
 
 Im aktuellen Stand ist die Threshold-Key-Generierung vereinfacht (der erste eingereichte Key Share wird als kombinierter Public Key verwendet). Eine vollständige t-of-n DKG-Implementierung ist für Phase 2 geplant.
 
@@ -107,7 +109,7 @@ Jeder Eintrag im Audit Trail enthält neben Aktion, Akteur und Details den **Has
 | Kombinierter Public Key Fingerprint | |
 | Verschlüsselte Zwischenergebnisse | |
 
-Die rechte Spalte ist **nicht** eine Frage von Policy oder Vertrauen – sie ist unter dem gewählten kryptographischen Modell **mathematisch unmöglich** für die Plattform.
+Die rechte Spalte ist **nicht** primär eine Frage von Policy oder Vertrauen – unter dem gewählten kryptographischen Modell und bei korrekter Implementierung ist es nach heutigem Stand der Technik praktisch nicht möglich, dass die Plattform diese Informationen sieht.
 
 ---
 
@@ -141,7 +143,7 @@ Jeder kann aus unserem Quellcode exakt dieselben Docker Images bauen und den Has
 
 ### Was das bedeutet
 
-Du musst uns nicht vertrauen. **Du kannst prüfen.**  
+Du musst dich nicht allein auf Vertrauen verlassen – du kannst zentrale Eigenschaften technisch prüfen.*  
 Das ist der fundamentale Unterschied zu proprietären Lösungen.
 
 ### Was wir ehrlich nicht bieten (noch nicht)
@@ -151,6 +153,20 @@ Das ist der fundamentale Unterschied zu proprietären Lösungen.
 - Keine akademischen Kryptographie-Credentials im Gründerteam
 
 Wir sind ehrlich über diese Lücken, weil Ehrlichkeit Teil unseres Vertrauensmodells ist.
+
+---
+
+## Rechtlicher Rahmen & Sicherheitshinweise
+
+Für alle Aussagen zu Sicherheit, Kryptographie und Compliance gelten die folgenden Dokumente als Referenz:
+
+- `SECURITY.md` – technische Sicherheitsbeschreibung und bekannte Einschränkungen (keine Rechtsberatung).
+- `docs/OWASP_ANALYSIS.md` – interne Einordnung entlang OWASP Top 10.
+- `LEGAL_NOTES.md` – interne Leitlinien, wie über Sicherheit/Compliance gesprochen wird (Formulierungen, die wir vermeiden).
+- `docs/DECISION_MAKER.md` – Kurzinfo für Entscheider:innen und Institutionen (inkl. Hinweisen, was ausdrücklich *nicht* zugesagt wird).
+- `docs/IMPRINT_TEMPLATE.md` und `docs/PRIVACY_TEMPLATE.md` – rechtliche Templates für Impressum/Datenschutz (müssen mit anwaltlicher Hilfe ausgefüllt werden).
+
+Diese Dokumente beschreiben beabsichtigte Sicherheitseigenschaften, nicht aber deren rechtliche Bewertung. Ob ein konkretes Deployment rechtlich zulässig ist, muss immer im Einzelfall von qualifizierten Jurist:innen und Compliance-Verantwortlichen beurteilt werden.
 
 ---
 
@@ -218,7 +234,7 @@ Descriptive Statistics (Mean, Std Dev, Min, Max), Correlation Analysis, Group Co
 
 **Kryptographie:** Vollständige Threshold-Decryption-Implementierung, Blockchain-Anchoring des Audit Trails (Polygon, &lt;1 €/Tag), Zero-Knowledge-Proofs für Upload-Verifikation.
 
-**Compliance:** DSGVO Data Processing Agreement, HIPAA BAA, ISO 27001-Vorbereitung, Penetration Test durch externe Firma.
+**Compliance (geplant, abhängig von konkreten Kundenprojekten):** Abschluss eines DSGVO-konformen Auftragsverarbeitungsvertrags (DPA), HIPAA BAA, ISO 27001-Vorbereitung sowie ein externer Penetrationstest. Diese Punkte sind Ziele für Phase 2 und stellen keine aktuelle Zertifizierung oder Rechtsberatung dar.
 
 **Produkt:** Federated Mode (lokaler Agent, Daten verlassen die Institution nie), erweiterter Algorithmen-Katalog, API für programmatischen Zugriff, SLA und Support.
 

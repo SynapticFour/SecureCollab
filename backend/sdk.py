@@ -206,7 +206,7 @@ def generate_key_share(institution_email: str) -> dict[str, Any]:
     verlassen – nur er ermöglicht später die Entschlüsselung bzw. die Erzeugung
     von Decryption Shares.
 
-    KRYPTOGARANTIE: Der Secret Key existiert nur im Speicher und in der lokal
+    Kryptographische Einordnung (kein Rechtsversprechen): Der Secret Key existiert nur im Speicher und in der lokal
     verschlüsselten Datei. Er wird nicht über das Netzwerk übertragen. Selbst
     der Plattformbetreiber kann mit nur dem Public Key Share keine Daten
     entschlüsseln. Die passwortgeschützte Speicherung verhindert unbefugten
@@ -251,7 +251,7 @@ def verify_study_public_key(study_id: str, api_base_url: str) -> dict[str, Any]:
     Ein manipulierter Server könnte sonst einen anderen Key ausliefern und
     später selbst entschlüsseln (wenn er den zugehörigen Secret Key hat).
 
-    GARANTIE: Ein verified=True bedeutet: Der auf dem Server gespeicherte
+    Aussage über das Protokolldesign (kein Rechtsversprechen): Ein verified=True bedeutet: Der auf dem Server gespeicherte
     Public Key hat exakt den angezeigten Fingerprint. Damit ist nachweisbar,
     mit welchem Key verschlüsselt wurde. NICHT garantiert wird: Dass dieser
     Key tatsächlich aus einem ehrlichen Threshold-Setup stammt (das müsste
@@ -290,7 +290,7 @@ def _is_numeric_column(rows: list[dict], key: str) -> bool:
 # -----------------------------------------------------------------------------
 # Was: Analysiert lokale CSV nur nach Metadaten (Typ, Range, Null-Anteil) – keine echten Werte.
 # Warum: Precondition für Study – alle Institutionen müssen dasselbe Schema akzeptieren.
-# Garantie: Keine Rohdaten verlassen den Rechner bei analyze_local_schema.
+# Aussage über das Protokolldesign (kein Rechtsversprechen): Keine Rohdaten verlassen den Rechner bei analyze_local_schema.
 # NICHT garantiert: negotiate_schema und run_dry_run senden Metadaten bzw. synthetische Daten.
 
 
@@ -358,7 +358,7 @@ def negotiate_schema(
     3. Schlägt automatisches Mapping vor (Name + Aliase)
     4. Optional: proposed_mapping übergeben oder nach Bestätigung submit
     5. Sendet Schema + Mapping an Server, gibt Kompatibilitätsbericht zurück.
-    Garantie: institution_signature auf dem Server bindet Mapping + protocol_hash.
+    Aussage über das Protokolldesign (kein Rechtsversprechen): institution_signature auf dem Server bindet Mapping + protocol_hash.
     NICHT garantiert: Dass die tatsächlichen Daten dem Mapping entsprechen (Dry Run nötig).
     """
     analysis = analyze_local_schema(csv_path)
@@ -419,7 +419,7 @@ def run_dry_run(
     Server validiert Schema und kann erlaubte Algorithmen auf Testdaten ausführen.
     Gibt Validierungsbericht zurück.
     HINWEIS: Diese Funktion lädt Klartextdaten hoch – nur für synthetische Testdaten verwenden.
-    Garantie: Server speichert Dry-Run-Ergebnis; Voraussetzung für Study-Aktivierung.
+    Aussage über das Protokolldesign (kein Rechtsversprechen): Server speichert Dry-Run-Ergebnis; Voraussetzung für Study-Aktivierung.
     NICHT garantiert: Vertraulichkeit der hochgeladenen Daten (Klartext).
     """
     path = Path(csv_path)
@@ -462,7 +462,7 @@ def encrypt_and_upload(
     dem richtigen Key hochgeladen. Der Commitment bindet Key, Zeitpunkt und
     Institution – ohne die Rohdaten preiszugeben.
 
-    KRYPTOGARANTIE: Der Commitment-Mechanismus beweist: (1) Welcher Public Key
+    Kryptographische Einordnung (kein Rechtsversprechen): Der Commitment-Mechanismus beweist: (1) Welcher Public Key
     verwendet wurde (Fingerprint im Hash), (2) Dass diese exakte Ciphertext-Datei
     hochgeladen wurde (ciphertext im Hash), (3) Wann und von wem (timestamp, email).
     Rohdaten erscheinen nirgends; die CSV verlässt den Rechner nur verschlüsselt.
@@ -551,7 +551,7 @@ def compute_decryption_share(
     mindestens t solche Shares vorliegen, kann das Endergebnis rekonstruiert werden –
     ohne dass jemals ein vollständiger Secret Key existiert.
 
-    KRYPTOGARANTIE: Ein einzelner Decryption Share verrät nichts über das
+    Kryptographische Einordnung (kein Rechtsversprechen): Ein einzelner Decryption Share verrät nichts über das
     Endergebnis. Er ist nur in Kombination mit (mindestens t-1) weiteren Shares
     auswertbar. Selbst der Plattformbetreiber kann mit nur einem Share die
     Ergebnisdaten nicht rekonstruieren. So bleibt die Kontrolle beim Konsortium
@@ -597,7 +597,7 @@ def verify_audit_trail(study_id: str, api_base_url: str, institution_email: str 
     Abgleich mit den eigenen Logs stellt sicher, dass die eigene Sicht (z. B.
     Commitment-Hashes) mit der Server-Sicht übereinstimmt.
 
-    GARANTIE: Ein gültiger Audit Trail (chain_valid=True, keine anomalies)
+    Aussage über das Protokolldesign (kein Rechtsversprechen): Ein gültiger Audit Trail (chain_valid=True, keine anomalies)
     beweist: (1) Die Reihenfolge und der Inhalt der geloggten Aktionen sind
     unverändert. (2) Jeder Eintrag ist durch den nächsten (previous_hash)
     kryptographisch angebunden. (3) Wenn own_entries_verified=True, stimmen

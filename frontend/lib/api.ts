@@ -1,6 +1,21 @@
 // SPDX-License-Identifier: Apache-2.0
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
+function buildErrorMessage(payload: any, fallback: string): string {
+  const detail = payload && (payload.detail || payload.error);
+  const errorId = payload && payload.error_id;
+  if (detail && errorId) {
+    return `${detail} (error_id: ${errorId})`;
+  }
+  if (detail) {
+    return detail;
+  }
+  if (errorId) {
+    return `${fallback} (error_id: ${errorId})`;
+  }
+  return fallback;
+}
+
 export type AlgorithmInfo = {
   name: string;
   description: string;
@@ -113,7 +128,7 @@ export async function getStudy(studyId: number): Promise<StudyDetail> {
   const res = await fetch(`${API_BASE}/studies/${studyId}`);
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
-    throw new Error(err.detail || "Study not found");
+    throw new Error(buildErrorMessage(err, "Study not found"));
   }
   return res.json();
 }
@@ -136,7 +151,7 @@ export async function createStudy(body: {
   });
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
-    throw new Error(err.detail || "Create study failed");
+    throw new Error(buildErrorMessage(err, "Create study failed"));
   }
   return res.json();
 }
@@ -152,7 +167,7 @@ export async function joinStudy(
   });
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
-    throw new Error(err.detail || "Join failed");
+    throw new Error(buildErrorMessage(err, "Join failed"));
   }
   return res.json();
 }
@@ -180,7 +195,7 @@ export async function uploadStudyDataset(
   const res = await fetch(`${API_BASE}/studies/${studyId}/upload_dataset`, { method: "POST", body: form });
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
-    throw new Error(err.detail || "Upload failed");
+    throw new Error(buildErrorMessage(err, "Upload failed"));
   }
   return res.json();
 }
@@ -196,7 +211,7 @@ export async function requestStudyComputation(
   });
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
-    throw new Error(err.detail || "Request failed");
+    throw new Error(buildErrorMessage(err, "Request failed"));
   }
   return res.json();
 }
@@ -213,7 +228,7 @@ export async function approveStudyJob(
   });
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
-    throw new Error(err.detail || "Approve failed");
+    throw new Error(buildErrorMessage(err, "Approve failed"));
   }
   return res.json();
 }
@@ -231,7 +246,7 @@ export async function submitDecryptionShare(
   });
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
-    throw new Error(err.detail || "Submit share failed");
+    throw new Error(buildErrorMessage(err, "Submit share failed"));
   }
   return res.json();
 }
@@ -263,7 +278,7 @@ export async function uploadDataset(
   const res = await fetch(`${API_BASE}/datasets/upload`, { method: "POST", body: form });
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
-    throw new Error(err.detail || "Upload failed");
+    throw new Error(buildErrorMessage(err, "Upload failed"));
   }
   return res.json();
 }
@@ -290,7 +305,7 @@ export async function approveJob(jobId: number): Promise<{ result: number }> {
   });
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
-    throw new Error(err.detail || "Approve failed");
+    throw new Error(buildErrorMessage(err, "Approve failed"));
   }
   return res.json();
 }
@@ -301,7 +316,7 @@ export async function rejectJob(jobId: number): Promise<void> {
   });
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
-    throw new Error(err.detail || "Reject failed");
+    throw new Error(buildErrorMessage(err, "Reject failed"));
   }
 }
 
@@ -324,7 +339,7 @@ export async function requestJob(
   });
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
-    throw new Error(err.detail || "Request failed");
+    throw new Error(buildErrorMessage(err, "Request failed"));
   }
   return res.json();
 }

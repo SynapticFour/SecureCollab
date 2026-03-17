@@ -20,7 +20,14 @@ export default function RootLayout({
   return (
     <html lang="en" className={inter.variable}>
       <body className="min-h-screen font-sans antialiased">
-        <EmailProvider>{children}</EmailProvider>
+        <EmailProvider>
+          <div className="border-b border-amber-300 bg-amber-50 px-4 py-2 text-xs text-amber-900 md:px-6">
+            <p className="max-w-5xl">
+              This is a hobby / proof-of-concept instance of SecureCollab. It is intended for experiments with synthetic or test data only and has not undergone a formal security or legal review. Do not upload real patient data or rely on this deployment for regulatory compliance.
+            </p>
+          </div>
+          {children}
+        </EmailProvider>
       </body>
     </html>
   );

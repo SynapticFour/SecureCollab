@@ -6,9 +6,11 @@ Multi-party clinical data analysis using Homomorphic Encryption — compute stat
 
 ## Status
 
-This is a hobby project / proof of concept. It demonstrates the full cryptographic concept with real HE (TenSEAL/CKKS), a working multi-party workflow, and a usable web UI. It has not undergone a formal security audit. It is not production-ready for real patient data.
+This is a hobby project / proof of concept. It demonstrates the intended cryptographic concept with real HE (TenSEAL/CKKS), a working multi-party workflow, and a usable web UI. It has not undergone a formal security audit or legal review. It is not production-ready for real patient data and does not constitute legal advice or a compliance assessment.
 
 Planned production-oriented features: [ROADMAP.md](ROADMAP.md).
+
+For wording around security, privacy, and compliance, see the internal guidelines in [`LEGAL_NOTES.md`](LEGAL_NOTES.md). They describe how we talk about intended security properties and what we explicitly do **not** promise (no legal guarantees, no compliance certification).
 
 ## How it works
 
@@ -42,9 +44,9 @@ The audit trail is append-only and hash-chained. Each entry includes the hash of
        (neither saw the other's data)
 ```
 
-## Cryptographic Guarantees
+## Cryptographic properties (design goals)
 
-**Guaranteed:**
+**Designed to ensure (no legal guarantee):**
 
 - Raw data is never decrypted on the server.
 - Private key shares never leave the institution's machine (SDK runs locally).
@@ -70,7 +72,7 @@ The audit trail is append-only and hash-chained. Each entry includes the hash of
 | Combined public key fingerprint | |
 | Encrypted intermediate results | |
 
-The right column is not policy — under the cryptographic model it is infeasible for the platform to see those things.
+The right column reflects the intended cryptographic design. Under the stated model and assuming correct implementation and deployment, it should be infeasible in practice for the operator to see those things, but this is not a legal or absolute guarantee.
 
 ## Quickstart
 

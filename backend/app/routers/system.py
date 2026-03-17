@@ -1,10 +1,11 @@
 # SPDX-License-Identifier: Apache-2.0
-"""Health, integrity, and algorithms endpoints."""
+"""Health, integrity, config-summary, and algorithms endpoints."""
 import sys
 
-from fastapi import APIRouter, Query, Request
+from fastapi import APIRouter, Depends, Query, Request
 
-from app.core.security import rate_limit
+from app.config import settings
+from app.core.security import AuthUser, get_limiter, rate_limit, require_admin
 from app.services.integrity_service import get_deployment_integrity, verify_codebase_hash
 
 router = APIRouter(tags=["system"])
@@ -51,3 +52,22 @@ def system_integrity_verify(request: Request, expected: str = Query(..., alias="
         return {"verified": False, "expected_hash": expected, "current_hash": "unknown", "error": "Verification failed"}
 
 
+@router.get("/config-summary")
+@rate_limit("60/hour")
+def system_config_summary(request: Request, current_user: AuthUser = Depends(require_admin)):
+    """
+    Non-sensitive configuration summary for operators.
+    Does NOT include secrets. Intended for debugging/ops, not compliance statements.
+    """
+    db_url = settings.database_url
+    db_type = "sqlite" if "sqlite" in db_url else "postgresql" if "postgres" in db_url else "other"
+    limiter = get_limiter()
+    return {
+        "db_type": db_type,
+        "upload_dir": str(settings.upload_dir_path),
+        "max_upload_size_mb": settings.max_upload_size_mb,
+        "max_concurrent_computations": settings.max_concurrent_computations,
+        "rate_limiting_enabled": limiter is not None,
+        "app_title": "SecureCollab API",
+        "app_version": "0.1.0",
+    }

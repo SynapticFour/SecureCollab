@@ -13,7 +13,7 @@ Planned production-oriented features. Current state is Phase 1 (hobby / proof of
 
 - Full threshold decryption; blockchain anchoring of audit trail (Polygon)
 - External security audit; confidential computing (TEE)
-- PostgreSQL, Azure/AMD SEV-SNP; DSGVO/HIPAA compliance
+- PostgreSQL, Azure/AMD SEV-SNP; Vorbereitung auf DSGVO/HIPAA-Anforderungen (formale Compliance hängt von Deployment, Verträgen und Prozessen ab)
 - Federated mode (data never leaves institution)
 
 ## Phase 3 (if validated)
