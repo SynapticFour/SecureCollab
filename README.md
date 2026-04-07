@@ -4,6 +4,8 @@ Multi-party clinical data analysis using Homomorphic Encryption — compute stat
 
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
 
+> **Legal notice:** This repository documents technical capabilities and operating guidance. It is not legal advice and does not by itself provide regulatory certification or compliance guarantees. Compliance outcomes depend on operator configuration, contracts, and organisational controls.
+
 ## Status
 
 This is a hobby project / proof of concept. It demonstrates the intended cryptographic concept with real HE (TenSEAL/CKKS), a working multi-party workflow, and a usable web UI. It has not undergone a formal security audit or legal review. It is not production-ready for real patient data and does not constitute legal advice or a compliance assessment.
@@ -165,4 +167,15 @@ Apache 2.0 — see [LICENSE](LICENSE).
 
 ## Contributing
 
-Security issues: please report to info@synapticfour.com (responsible disclosure), not as a public GitHub issue. For other contributions: open an issue or pull request as usual.
+Security issues: please report to contact@synapticfour.com (responsible disclosure), not as a public GitHub issue. For other contributions: open an issue or pull request as usual.
+
+## Support
+
+For collaboration and deployment inquiries, contact [contact@synapticfour.com](mailto:contact@synapticfour.com).
+
+---
+
+Built by **Synaptic Four** for transparent, standards-based scientific infrastructure.
+Developed by a neurodiverse team, including autistic engineers, with a focus on precision, clarity, and reliable operations.
+Contact: [contact@synapticfour.com](mailto:contact@synapticfour.com) · [synapticfour.com](https://synapticfour.com)
+
