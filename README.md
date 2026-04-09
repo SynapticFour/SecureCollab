@@ -112,6 +112,19 @@ python encrypt.py sample_clinical_data.csv
 
 Full local dev and SDK usage: [DOCUMENTATION.md](DOCUMENTATION.md#lokale-entwicklung).
 
+## Deployment (synapticfour-infra)
+
+Production deployment is orchestrated by `synapticfour-infra` with a dedicated app slot:
+
+- app name: `securecollab`
+- domain: `securecollab.synapticfour.tech`
+- deploy event: `deploy-app` with `client_payload.app_name=securecollab`
+- image repos:
+  - `ghcr.io/synapticfour/securecollab-backend:<tag>`
+  - `ghcr.io/synapticfour/securecollab-frontend:<tag>`
+
+Use workflow `.github/workflows/ghcr-infra.yml` to build and push both images and dispatch infra deployment.
+
 ## Algorithms
 
 | Algorithm | Inputs | Approx. time (1k rows) | Clinical use case |
