@@ -50,3 +50,13 @@ Thumbs.db
 # Docker / logs
 *.log
 logs/
+
+# Generated artifacts and caches
+.svelte-kit/
+.astro/
+coverage/
+dist/
+build/
+target/
+.pytest_cache/
+.ruff_cache/

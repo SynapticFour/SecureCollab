@@ -1,9 +1,17 @@
 // SPDX-License-Identifier: Apache-2.0
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
-function buildErrorMessage(payload: any, fallback: string): string {
-  const detail = payload && (payload.detail || payload.error);
-  const errorId = payload && payload.error_id;
+type ErrorPayload = {
+  detail?: string;
+  error?: string;
+  error_id?: string;
+};
+
+function buildErrorMessage(payload: unknown, fallback: string): string {
+  const safePayload =
+    typeof payload === "object" && payload !== null ? (payload as ErrorPayload) : {};
+  const detail = safePayload.detail || safePayload.error;
+  const errorId = safePayload.error_id;
   if (detail && errorId) {
     return `${detail} (error_id: ${errorId})`;
   }
