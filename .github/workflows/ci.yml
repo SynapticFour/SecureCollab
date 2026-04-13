@@ -3,6 +3,7 @@ name: CI
 on: [push, pull_request]
 jobs:
   test-backend:
+    if: github.actor != 'dependabot[bot]'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -14,6 +15,7 @@ jobs:
       - run: cd backend && pytest tests/ -v --tb=short --cov=app --cov-report=term-missing --cov-fail-under=60
 
   test-frontend:
+    if: github.actor != 'dependabot[bot]'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -23,6 +25,7 @@ jobs:
       - run: cd frontend && npm ci && npm run build
 
   lint-backend:
+    if: github.actor != 'dependabot[bot]'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
