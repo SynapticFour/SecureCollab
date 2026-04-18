@@ -42,7 +42,7 @@ You should see something like:
   "computed_at": "2025-...",
   "tenseal_version": "0.3.15",
   "fastapi_version": "0.115.x",
-  "python_version": "3.11.x"
+  "python_version": "3.12.x"
 }
 ```
 

@@ -9,7 +9,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.11"
+          python-version: "3.12"
       - run: pip install -r backend/requirements.txt -r backend/requirements-dev.txt
       # TODO: increase to 70% as more integration tests are added
       - run: cd backend && pytest tests/ -v --tb=short --cov=app --cov-report=term-missing --cov-fail-under=60
@@ -21,7 +21,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "22"
       - run: cd frontend && npm ci && npm run build
 
   lint-backend:
@@ -31,7 +31,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.11"
+          python-version: "3.12"
       - run: pip install ruff mypy
       - run: cd backend && ruff check app/
       - run: cd backend && mypy app/ || true

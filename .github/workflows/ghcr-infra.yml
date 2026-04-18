@@ -20,13 +20,13 @@ jobs:
 
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.11"
+          python-version: "3.12"
       - run: pip install -r backend/requirements.txt -r backend/requirements-dev.txt
       - run: cd backend && pytest tests/ -q
 
       - uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "22"
       - run: cd frontend && npm ci && npm run build
 
       - uses: docker/setup-buildx-action@v3
