@@ -6,7 +6,7 @@ This file outlines a **technical** sequence for deploying SecureCollab (environm
 
 For legal and compliance considerations, see:
 
-- `LEGAL_NOTES.md` – internal wording guidelines and high-level legal caveats.
+- `LEGAL_NOTES.md` – wording guardrails and high-level legal caveats.
 - `docs/DECISION_MAKER.md` – overview for institutions and decision makers.
 - `SECURITY.md` and `docs/OWASP_ANALYSIS.md` – technical security design and open points.
 

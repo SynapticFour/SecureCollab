@@ -1,8 +1,8 @@
 # SPDX-License-Identifier: Apache-2.0
 
-## LEGAL NOTES (Internal Draft, Non-Binding)
+## Legal Notes (Non-Binding)
 
-This document is an internal guideline for how we talk about security, privacy, and compliance in the SecureCollab repository (code comments, UI text, documentation).
+This document defines communication guardrails for how security, privacy, and compliance statements are written in this repository (code comments, UI text, documentation).
 
 It is **not** legal advice and does **not** replace consultation with qualified counsel.
 

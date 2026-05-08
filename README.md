@@ -12,7 +12,7 @@ This is a hobby project / proof of concept. It demonstrates the intended cryptog
 
 Planned production-oriented features: [ROADMAP.md](ROADMAP.md).
 
-For wording around security, privacy, and compliance, see the internal guidelines in [`LEGAL_NOTES.md`](LEGAL_NOTES.md). They describe how we talk about intended security properties and what we explicitly do **not** promise (no legal guarantees, no compliance certification).
+For wording around security, privacy, and compliance, see [`LEGAL_NOTES.md`](LEGAL_NOTES.md). It provides communication guardrails for technical documentation and explicit caveats.
 
 ## How it works
 
@@ -188,7 +188,5 @@ For collaboration and deployment inquiries, contact [contact@synapticfour.com](m
 
 ---
 
-Built by **Synaptic Four** for transparent, standards-based scientific infrastructure.
-Developed by a neurodiverse team, including autistic engineers, with a focus on precision, clarity, and reliable operations.
-Contact: [contact@synapticfour.com](mailto:contact@synapticfour.com) · [synapticfour.com](https://synapticfour.com)
+Contact: [contact@synapticfour.com](mailto:contact@synapticfour.com)
 

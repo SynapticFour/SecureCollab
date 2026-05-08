@@ -23,4 +23,3 @@ jobs:
         with:
           node-version: "22"
       - run: cd frontend && npm ci && npm audit --audit-level=high
-    continue-on-error: true
