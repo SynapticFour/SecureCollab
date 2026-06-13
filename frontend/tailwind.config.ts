@@ -10,9 +10,9 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        primary: "#0f2744",
+        primary: "var(--sf-color-navy)",
         "primary-hover": "#162d52",
-        accent: "#0ea5e9",
+        accent: "var(--sf-color-teal)",
         "accent-hover": "#0284c7",
         success: "#10b981",
         warning: "#f59e0b",

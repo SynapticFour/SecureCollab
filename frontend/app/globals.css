@@ -1,14 +1,28 @@
+@import '../src/styles/synapticfour-brand-tokens.css';
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 :root {
-  --primary: #0f2744;
-  --accent: #0ea5e9;
+  --primary: var(--sf-color-navy);
+  --accent: var(--sf-color-teal);
   --success: #10b981;
   --warning: #f59e0b;
 }
 
 body {
-  @apply bg-slate-50 text-slate-900 antialiased;
+  @apply antialiased;
+  font-family: var(--sf-font-sans);
+  color: var(--sf-color-navy-text);
+  background-color: var(--sf-color-background);
+}
+
+:focus {
+  outline: none;
+}
+:focus-visible {
+  outline: var(--sf-focus-ring-width) solid var(--sf-focus-ring);
+  outline-offset: var(--sf-focus-ring-offset);
+  border-radius: 4px;
 }
