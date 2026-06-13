@@ -78,12 +78,28 @@ The right column reflects the intended cryptographic design. Under the stated mo
 
 ## Quickstart
 
-**Prerequisites:** Python 3.11, Node.js 18+, (optional) Docker
+**Prerequisites:** Docker (recommended), or Python 3.11 + Node.js 18+ for split dev
+
+### One command (Docker — full stack)
+
+```bash
+git clone https://github.com/SynapticFour/SecureCollab
+cd SecureCollab
+make up
+# Frontend: http://localhost:3000  ·  Backend: http://localhost:8000
+```
+
+| Goal | Command |
+|------|---------|
+| Stop; **keep data** | `make down` |
+| Remove volumes | `make destroy` |
+
+### Manual dev (two terminals)
 
 ```bash
 # Clone
-git clone https://github.com/[username]/securecollab
-cd securecollab
+git clone https://github.com/SynapticFour/SecureCollab
+cd SecureCollab
 
 # Backend
 cd backend
@@ -118,6 +134,9 @@ Production deployment is orchestrated by `synapticfour-infra` with a dedicated a
 
 - app name: `securecollab`
 - domain: `securecollab.synapticfour.tech`
+
+Local deployment matrix: **[docs/deployment/README.md](docs/deployment/README.md)**.
+
 - deploy event: `deploy-app` with `client_payload.app_name=securecollab`
 - image repos:
   - `ghcr.io/synapticfour/securecollab-backend:<tag>`
@@ -156,7 +175,7 @@ curl https://your-instance.com/system/integrity
 Returns `codebase_hash`, `git_commit`, and versions. Reproduce locally and compare:
 
 ```bash
-git clone https://github.com/[username]/securecollab && cd securecollab
+git clone https://github.com/SynapticFour/SecureCollab && cd securecollab
 # Build or run integrity module; compare hash to codebase_hash from the response
 ```
 
