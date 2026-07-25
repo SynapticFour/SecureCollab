@@ -8,7 +8,7 @@ Multi-party clinical data analysis using Homomorphic Encryption — compute stat
 
 ## Status
 
-This is a hobby project / proof of concept. It demonstrates the intended cryptographic concept with real HE (TenSEAL/CKKS), a working multi-party workflow, and a usable web UI. It has not undergone a formal security audit or legal review. It is not production-ready for real patient data and does not constitute legal advice or a compliance assessment.
+This is a Synaptic Four research prototype / proof of concept. It demonstrates the intended cryptographic concept with real HE (TenSEAL/CKKS), a working multi-party workflow, and a usable web UI. It has not undergone a formal security audit or legal review. It is not production-ready for real patient data and does not constitute legal advice or a compliance assessment. Production use is blocked until a security audit and migration discipline (Alembic) are in place.
 
 Planned production-oriented features: [ROADMAP.md](ROADMAP.md).
 
