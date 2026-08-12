@@ -10,6 +10,8 @@ Multi-party clinical data analysis using Homomorphic Encryption — compute stat
 
 This is a Synaptic Four research prototype / proof of concept. It demonstrates the intended cryptographic concept with real HE (TenSEAL/CKKS), a working multi-party workflow, and a usable web UI. It has not undergone a formal security audit or legal review. It is not production-ready for real patient data and does not constitute legal advice or a compliance assessment. Production use is blocked until a security audit and migration discipline (Alembic) are in place.
 
+**Maintenance budget:** fenced satellite (org L2). Default eng attention = **monthly** audit/CI hygiene only — no feature work unless a named conversation needs it. See Synaptic Four business `strategy/org-level-up/SATELLITE-FENCING.md`.
+
 Planned production-oriented features: [ROADMAP.md](ROADMAP.md).
 
 For wording around security, privacy, and compliance, see [`LEGAL_NOTES.md`](LEGAL_NOTES.md). It provides communication guardrails for technical documentation and explicit caveats.
@@ -208,4 +210,3 @@ For collaboration and deployment inquiries, contact [contact@synapticfour.com](m
 ---
 
 Contact: [contact@synapticfour.com](mailto:contact@synapticfour.com)
-
