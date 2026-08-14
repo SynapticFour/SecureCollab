@@ -45,8 +45,12 @@ export default function RunAnalysisPage() {
         setRequestCompleted(jobId);
         setSubmittedJobId(jobId);
         setJobStatus("completed");
-        setResultValue(job.result ?? null);
-        setResultJson(job.result_json ?? null);
+        setResultValue(null);
+        const json = job.result_json ?? null;
+        setResultJson(json);
+        if (json && typeof json === "object" && json["encrypted"] !== true && typeof job.result === "number") {
+          setResultValue(job.result);
+        }
         loadAccess();
         setPendingRequests(getMyRequests().filter((r) => r.status === "pending"));
       } else if (job.status === "rejected") {
@@ -237,7 +241,16 @@ export default function RunAnalysisPage() {
               )}
               {jobStatus === "completed" && (resultValue != null || resultJson) && (
                 <div className="mt-4 rounded-lg bg-success/10 p-4">
-                  {resultJson && typeof resultJson === "object" && Object.keys(resultJson).length > 0 ? (
+                  {resultJson && typeof resultJson === "object" && resultJson["encrypted"] === true ? (
+                    <div className="space-y-2">
+                      <p className="text-lg font-semibold text-success">Encrypted result ready</p>
+                      <p className="text-sm text-slate-600">
+                        The server never decrypted this output. Finalize locally with the SDK
+                        (`python backend/decrypt.py result.json encrypted.secret`) using the
+                        institution secret key.
+                      </p>
+                    </div>
+                  ) : resultJson && typeof resultJson === "object" && Object.keys(resultJson).length > 0 ? (
                     <div className="space-y-2">
                       <pre className="overflow-x-auto rounded bg-white/50 p-2 text-sm text-slate-800">
                         {JSON.stringify(resultJson, null, 2)}
@@ -247,17 +260,11 @@ export default function RunAnalysisPage() {
                           Mean: {Number(resultValue).toFixed(2)}
                         </p>
                       )}
-                      <p className="text-sm text-slate-600">
-                        Computed on encrypted data – source data was never decrypted.
-                      </p>
                     </div>
                   ) : (
                     <>
                       <p className="text-2xl font-semibold text-success">
                         Result: {resultValue != null ? Number(resultValue).toFixed(2) : "—"}
-                      </p>
-                      <p className="mt-2 text-sm text-slate-600">
-                        Computed on encrypted data – source data was never decrypted.
                       </p>
                     </>
                   )}

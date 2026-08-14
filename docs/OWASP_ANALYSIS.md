@@ -8,7 +8,7 @@ Periodic review of SecureCollab against OWASP Top 10 and related checks. Last up
 
 | Check | Status | Notes |
 |-------|--------|------|
-| Study/Job/Dataset access by ID | OK | No auth; IDs are opaque. In production add authz (e.g. participant must belong to study). |
+| Study/Job/Dataset access by ID | OK | `X-User-Email` required; study routes check participant membership; job approve/reject is owner-only. |
 | File path traversal | OK | `secure_filename()` and `resolve()` + `relative_to(uploads)` prevent path traversal on uploads. |
 | Direct object reference | Mitigated | IDs are integers; no sensitive data in URL. Rate limiting on upload/approve reduces enumeration. |
 
@@ -31,7 +31,7 @@ Periodic review of SecureCollab against OWASP Top 10 and related checks. Last up
 | SQL injection | OK | SQLModel/ORM only; raw `text()` only for fixed ALTER TABLE list (no user input). |
 | Algorithm injection | OK | `ALGORITHM_REGISTRY` single source of truth; request algorithm validated against registry; no `eval`/user code. |
 | Command injection | OK | `subprocess.run(["git", ...])` with fixed args only; no user input. |
-| Deserialization (pickle) | Risk | Uploaded `.bin` files are `pickle.load()`ed. **Mitigation:** Only trusted institutions upload; server does not re-serve pickles to others. Consider signing/validating bundle structure before use. |
+| Deserialization | OK | JSON+base64 bundles only. Pickle magic and `secret_context` are rejected. |
 
 ---
 
@@ -104,9 +104,8 @@ Periodic review of SecureCollab against OWASP Top 10 and related checks. Last up
 
 | Item | Location | Action |
 |------|----------|--------|
-| Legacy monolith | `backend/main.py` | ~1800 lines; not used when running `uvicorn app.main:app`. Kept for reference or remove once migration is final. |
+| Legacy entrypoint | `backend/main.py` | Deprecation shim re-exporting `app.main:app`. Prefer `uvicorn app.main:app`. |
 | Custom exceptions | `app/core/exceptions.py` | `ValidationError`, `NotFoundError`, `AlgorithmNotAllowedError` defined but not used. Reserved for future; or use in routers and map to HTTP in handler. |
-| StudyUploadDatasetForm | `app/schemas.py` | Defined, never referenced. Reserved for future or remove. |
 
 ---
 

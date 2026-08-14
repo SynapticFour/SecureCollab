@@ -3,26 +3,18 @@
 from __future__ import annotations
 
 import logging
-from datetime import datetime
+
+from app.core.timeutils import audit_timestamp, utc_now
 
 logger = logging.getLogger("securecollab")
 
 _DEPLOYMENT_INTEGRITY: dict = {}
-_verify_impl = None
 
 try:
-    from integrity import compute_codebase_hash, verify_codebase_hash as _verify_impl
+    from integrity import compute_codebase_hash
 except Exception as e:
     logger.warning("Integrity module unavailable: %s", e)
     compute_codebase_hash = None
-
-    def _verify_impl(expected: str):
-        return {
-            "verified": False,
-            "expected_hash": expected,
-            "current_hash": "unknown",
-            "error": "Integrity module unavailable",
-        }
 
 
 def _init_integrity() -> dict:
@@ -43,7 +35,7 @@ def _unknown_integrity() -> dict:
     return {
         "codebase_hash": "unknown",
         "git_commit": "unknown",
-        "computed_at": datetime.utcnow().isoformat(),
+        "computed_at": audit_timestamp(utc_now()),
         "file_count": 0,
         "files_included": [],
     }
@@ -55,7 +47,13 @@ def get_deployment_integrity() -> dict:
 
 
 def verify_codebase_hash(expected: str) -> dict:
-    """Compare client-provided hash with current codebase hash."""
-    if _verify_impl is None:
-        return {"verified": False, "expected_hash": expected, "current_hash": "unknown", "error": "Integrity module unavailable"}
-    return _verify_impl(expected)
+    """Compare against the startup-cached hash. Does not re-walk the tree."""
+    current = get_deployment_integrity()
+    current_hash = current.get("codebase_hash", "unknown")
+    return {
+        "verified": current_hash == expected,
+        "expected_hash": expected,
+        "current_hash": current_hash,
+        "computed_at": current.get("computed_at", ""),
+        "file_count": current.get("file_count", 0),
+    }

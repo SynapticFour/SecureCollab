@@ -44,13 +44,13 @@ ALGORITHM_REGISTRY: dict[str, dict] = {
     },
     "distribution": {
         "name": "Distribution Overview",
-        "description": "Histogram approximation (5 buckets by index).",
+        "description": "Not available: CKKS cannot sort or bin by value. Requests raise an error.",
         "required_columns": 1,
         "column_types": ["float", "integer"],
         "parameters": {},
-        "estimated_seconds": 1,
-        "approximation_warning": "Buckets are index-based, not value-based.",
-        "clinical_use_case": "Rough distribution shape.",
+        "estimated_seconds": 0,
+        "approximation_warning": "Removed: index-split buckets were not a distribution of the data.",
+        "clinical_use_case": "Use descriptive_statistics instead.",
     },
     "mean": {
         "name": "Mean (Legacy)",

@@ -1,17 +1,16 @@
 # SPDX-License-Identifier: Apache-2.0
-"""Study endpoints: list, get, create, protocol create/finalize, join, public_key, schema submit, synthetic upload, activation_status, activate, upload_dataset, request_computation, job approve, submit_decryption_share, audit_trail, protocol."""
+"""Study endpoints. Identity from X-User-Email. HE compute never decrypts."""
 from __future__ import annotations
 
 import base64
 import csv
 import io
 import json
-import pickle
+import logging
 import uuid
-from datetime import datetime
 from pathlib import Path
 
-from fastapi import APIRouter, Body, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, Body, Depends, File, Form, HTTPException, Request, UploadFile
 from sqlmodel import select
 
 from app.config import (
@@ -21,7 +20,8 @@ from app.config import (
     STUDIES_UPLOADS_DIR,
 )
 from app.core.algorithms import ALGORITHM_REGISTRY
-from app.core.security import sha3_256_hex
+from app.core.security import AuthUser, assert_actor, rate_limit, require_user, sha3_256_hex
+from app.core.timeutils import audit_timestamp, utc_now
 from app.database import Session, engine
 from app.models import (
     AuditLog,
@@ -47,18 +47,48 @@ from app.schemas import (
     StudySubmitDecryptionShare,
 )
 from app.services.audit_service import write_audit_log
+from app.services.bundle import BundleError, load_bundle
+from app.services.compute_pool import ComputeBusyError, ComputeTimeoutError, run_he
+from app.services.he_service import run_on_datasets
 from app.services.schema_service import check_schema_compatibility, protocol_payload_for_hash
 
-try:
-    from algorithms import ALGORITHMS
-except ImportError:
-    ALGORITHMS = {}
-
 router = APIRouter(prefix="", tags=["studies"])
+_log = logging.getLogger("securecollab")
+
+
+def _ts(dt) -> str:
+    return audit_timestamp(dt)
+
+
+def _require_participant(session: Session, study_id: int, email: str) -> StudyParticipant:
+    participant = session.exec(
+        select(StudyParticipant).where(
+            StudyParticipant.study_id == study_id,
+            StudyParticipant.institution_email == email,
+        )
+    ).first()
+    if not participant:
+        raise HTTPException(status_code=403, detail="Institution ist kein Teilnehmer")
+    return participant
+
+
+def _study_encryption_key(study: Study, participants: list[StudyParticipant]) -> str:
+    """Study public key is the creator's share. This is not threshold DKG."""
+    for p in participants:
+        if p.institution_email == study.created_by and p.public_key_share:
+            return p.public_key_share
+    return next((p.public_key_share for p in participants if p.public_key_share), "") or ""
+
+
+def _fingerprint(combined: str) -> str:
+    try:
+        raw = base64.b64decode(combined) if isinstance(combined, str) else combined
+    except Exception:
+        raw = combined.encode("utf-8") if isinstance(combined, str) else combined
+    return sha3_256_hex(raw)
 
 
 def _get_activation_status(study_id: int, session: Session) -> dict:
-    """Compute activation_status conditions for a study (shared by GET and POST activate)."""
     study = session.get(Study, study_id)
     if not study:
         raise HTTPException(status_code=404, detail="Study nicht gefunden")
@@ -66,11 +96,19 @@ def _get_activation_status(study_id: int, session: Session) -> dict:
     participants = list(session.exec(select(StudyParticipant).where(StudyParticipant.study_id == study_id)))
     schema_submissions = list(session.exec(select(SchemaSubmission).where(SchemaSubmission.study_id == study_id)))
     synthetic = list(session.exec(select(SyntheticSubmission).where(SyntheticSubmission.study_id == study_id)))
-    n_compatible = sum(1 for s in schema_submissions if (json.loads(s.compatibility_result or "{}")).get("compatible"))
+    n_compatible = 0
+    for s in schema_submissions:
+        try:
+            if (json.loads(s.compatibility_result or "{}")).get("compatible"):
+                n_compatible += 1
+        except (json.JSONDecodeError, TypeError):
+            continue
     n_keys = sum(1 for p in participants if p.public_key_share)
     protocol_finalized = sp is not None and sp.status == "finalized"
     all_schemas = len(schema_submissions) >= len(participants) and n_compatible == len(participants)
-    all_dry_run = len(synthetic) >= len(participants)
+    emails_syn = {s.institution_email for s in synthetic}
+    emails_part = {p.institution_email for p in participants}
+    all_dry_run = emails_part <= emails_syn and len(participants) > 0
     all_keys = len(participants) >= study.threshold_n and n_keys >= study.threshold_n
     can_activate = protocol_finalized and all_schemas and all_dry_run and all_keys
     return {
@@ -78,77 +116,70 @@ def _get_activation_status(study_id: int, session: Session) -> dict:
         "conditions": [
             {"condition": "protocol_finalized", "met": protocol_finalized},
             {"condition": "all_schemas_compatible", "met": all_schemas, "details": {"n_submitted": len(schema_submissions), "n_compatible": n_compatible, "n_required": len(participants)}},
-            {"condition": "dry_run_completed", "met": all_dry_run, "details": {"n_completed": len(synthetic), "n_required": len(participants)}},
+            {"condition": "dry_run_completed", "met": all_dry_run, "details": {"n_completed": len(emails_syn), "n_required": len(participants)}},
             {"condition": "all_keys_submitted", "met": all_keys, "details": {"n_submitted": n_keys, "n_required": study.threshold_n}},
         ],
     }
 
 
 @router.get("")
-def studies_list(participant_email: str = ""):
-    """Listet Studies, an denen die Institution (participant_email) beteiligt ist."""
-    if not participant_email:
-        return []
+def studies_list(participant_email: str = "", user: AuthUser = Depends(require_user)):
+    """Studies the authenticated institution participates in."""
+    if participant_email:
+        assert_actor(user, participant_email)
     with Session(engine) as session:
         participants = list(
             session.exec(
-                select(StudyParticipant).where(
-                    StudyParticipant.institution_email == participant_email
-                )
+                select(StudyParticipant).where(StudyParticipant.institution_email == user.email)
             )
         )
         study_ids = list({p.study_id for p in participants})
         if not study_ids:
             return []
-        studies = [session.get(Study, sid) for sid in study_ids]
-        studies = [s for s in studies if s is not None]
+        studies = [s for s in (session.get(Study, sid) for sid in study_ids) if s is not None]
         if not studies:
             return []
         ids = [s.id for s in studies]
         from sqlalchemy import func
-        _rows = session.exec(
+        part_counts = {r[0]: r[1] for r in session.exec(
             select(StudyParticipant.study_id, func.count(StudyParticipant.id))
             .where(StudyParticipant.study_id.in_(ids))
             .group_by(StudyParticipant.study_id)
-        ).all()
-        part_counts = {r[0]: r[1] for r in _rows}
-        _rows = session.exec(
+        ).all()}
+        ds_counts = {r[0]: r[1] for r in session.exec(
             select(StudyDataset.study_id, func.count(StudyDataset.id))
             .where(StudyDataset.study_id.in_(ids))
             .group_by(StudyDataset.study_id)
-        ).all()
-        ds_counts = {r[0]: r[1] for r in _rows}
-        _rows = session.exec(
+        ).all()}
+        pending_counts = {r[0]: r[1] for r in session.exec(
             select(Job.study_id, func.count(Job.id))
             .where(Job.study_id.in_(ids), Job.status == "pending_approval")
             .group_by(Job.study_id)
-        ).all()
-        pending_counts = {r[0]: r[1] for r in _rows}
-        result = []
-        for study in studies:
-            sid = study.id
-            result.append({
+        ).all()}
+        return [
+            {
                 "id": study.id,
                 "name": study.name,
                 "description": study.description,
                 "status": study.status,
                 "threshold_n": study.threshold_n,
                 "threshold_t": study.threshold_t,
-                "participant_count": part_counts.get(sid, 0),
-                "dataset_count": ds_counts.get(sid, 0),
-                "pending_approvals": pending_counts.get(sid, 0),
-                "created_at": study.created_at.isoformat(),
-            })
-        return result
+                "participant_count": part_counts.get(study.id, 0),
+                "dataset_count": ds_counts.get(study.id, 0),
+                "pending_approvals": pending_counts.get(study.id, 0),
+                "created_at": _ts(study.created_at),
+            }
+            for study in studies
+        ]
 
 
 @router.get("/{study_id}")
-def studies_get(study_id: int):
-    """Einzelne Study abrufen (Metadaten)."""
+def studies_get(study_id: int, user: AuthUser = Depends(require_user)):
     with Session(engine) as session:
         study = session.get(Study, study_id)
         if not study:
             raise HTTPException(status_code=404, detail="Study nicht gefunden")
+        _require_participant(session, study_id, user.email)
         try:
             protocol = json.loads(study.protocol or "{}")
         except (json.JSONDecodeError, TypeError):
@@ -164,14 +195,15 @@ def studies_get(study_id: int):
             "combined_public_key": study.combined_public_key if study.status == "active" else None,
             "protocol": protocol,
             "created_by": study.created_by,
-            "created_at": study.created_at.isoformat(),
-            "updated_at": study.updated_at.isoformat(),
+            "created_at": _ts(study.created_at),
+            "updated_at": _ts(study.updated_at),
         }
 
 
 @router.post("/create")
-def studies_create(body: StudyCreate):
-    """Erstellt Study (draft), ersten Participant, Audit study_created."""
+@rate_limit("30/hour")
+def studies_create(request: Request, body: StudyCreate, user: AuthUser = Depends(require_user)):
+    assert_actor(user, body.creator_email)
     protocol = {
         "allowed_algorithms": body.allowed_algorithms,
         "column_definitions": body.column_definitions,
@@ -184,7 +216,7 @@ def studies_create(body: StudyCreate):
             status="draft",
             threshold_n=body.threshold_n,
             threshold_t=min(body.threshold_t, body.threshold_n),
-            created_by=body.creator_email,
+            created_by=user.email,
         )
         session.add(study)
         session.commit()
@@ -192,14 +224,14 @@ def studies_create(body: StudyCreate):
         part = StudyParticipant(
             study_id=study.id,
             institution_name=body.institution_name,
-            institution_email=body.creator_email,
+            institution_email=user.email,
             public_key_share=body.public_key_share or "",
-            key_share_committed_at=datetime.utcnow() if body.public_key_share else None,
+            key_share_committed_at=utc_now() if body.public_key_share else None,
         )
         session.add(part)
         session.commit()
         write_audit_log(
-            session, study.id, "study_created", body.creator_email,
+            session, study.id, "study_created", user.email,
             {"study_id": study.id, "name": body.name, "threshold_n": body.threshold_n, "threshold_t": study.threshold_t},
         )
         session.commit()
@@ -210,16 +242,12 @@ def studies_create(body: StudyCreate):
 
 
 @router.post("/{study_id}/protocol/create")
-def studies_protocol_create(study_id: int, body: ProtocolCreate):
-    """
-    Erstellt das Study-Protocol (nur vom Creator). Status draft.
-    Berechnet protocol_hash = SHA3-256(kanonisches Protocol-JSON).
-    """
+def studies_protocol_create(study_id: int, body: ProtocolCreate, user: AuthUser = Depends(require_user)):
     with Session(engine) as session:
         study = session.get(Study, study_id)
         if not study:
             raise HTTPException(status_code=404, detail="Study nicht gefunden")
-        if study.created_by and body.creator_email and study.created_by != body.creator_email:
+        if study.created_by != user.email:
             raise HTTPException(status_code=403, detail="Nur der Study-Creator darf das Protocol anlegen")
         existing = session.exec(select(StudyProtocol).where(StudyProtocol.study_id == study_id)).first()
         if existing:
@@ -247,7 +275,7 @@ def studies_protocol_create(study_id: int, body: ProtocolCreate):
             valid_range = cd.get("valid_range") or []
             vmin = valid_range[0] if len(valid_range) > 0 else cd.get("valid_range_min")
             vmax = valid_range[1] if len(valid_range) > 1 else cd.get("valid_range_max")
-            pc = ProtocolColumn(
+            session.add(ProtocolColumn(
                 protocol_id=sp.id,
                 column_name=cd.get("name", ""),
                 aliases=json.dumps(cd.get("aliases") or []),
@@ -258,40 +286,42 @@ def studies_protocol_create(study_id: int, body: ProtocolCreate):
                 allowed_values=json.dumps(cd.get("allowed_values")) if cd.get("allowed_values") else None,
                 required=cd.get("required", True),
                 description=cd.get("description", ""),
-            )
-            session.add(pc)
+            ))
         session.commit()
-        write_audit_log(session, study_id, "protocol_created", body.creator_email or study.created_by, {"protocol_hash": protocol_hash})
+        write_audit_log(session, study_id, "protocol_created", user.email, {"protocol_hash": protocol_hash})
         session.commit()
         return {"protocol_hash": protocol_hash, "status": "draft"}
 
 
 @router.post("/{study_id}/protocol/finalize")
-def studies_protocol_finalize(study_id: int, body: ProtocolFinalize = Body(default=ProtocolFinalize())):
-    """Setzt Protocol status=finalized. Ab dann: Protocol unveränderbar."""
+def studies_protocol_finalize(
+    study_id: int,
+    body: ProtocolFinalize = Body(default=ProtocolFinalize()),
+    user: AuthUser = Depends(require_user),
+):
     with Session(engine) as session:
         study = session.get(Study, study_id)
         if not study:
             raise HTTPException(status_code=404, detail="Study nicht gefunden")
+        if study.created_by != user.email:
+            raise HTTPException(status_code=403, detail="Nur der Study-Creator darf finalisieren")
         sp = session.exec(select(StudyProtocol).where(StudyProtocol.study_id == study_id)).first()
         if not sp:
             raise HTTPException(status_code=404, detail="Kein Protocol vorhanden. Zuerst protocol/create aufrufen.")
         if sp.status == "finalized":
             return {"status": "finalized", "protocol_hash": sp.protocol_hash}
-        creator_email = (body.creator_email if body else "") or ""
-        if study.created_by and creator_email and study.created_by != creator_email:
-            raise HTTPException(status_code=403, detail="Nur der Study-Creator darf finalisieren")
         sp.status = "finalized"
-        sp.finalized_at = datetime.utcnow()
+        sp.finalized_at = utc_now()
         session.add(sp)
-        write_audit_log(session, study_id, "protocol_finalized", creator_email or study.created_by, {"protocol_hash": sp.protocol_hash})
+        write_audit_log(session, study_id, "protocol_finalized", user.email, {"protocol_hash": sp.protocol_hash})
         session.commit()
         return {"status": "finalized", "protocol_hash": sp.protocol_hash}
 
 
 @router.post("/{study_id}/join")
-def studies_join(study_id: int, body: StudyJoin):
-    """Teilnehmer tritt bei. Nur möglich wenn Protocol finalisiert ist. Aktivierung erfolgt separat über POST /activate."""
+@rate_limit("30/hour")
+def studies_join(request: Request, study_id: int, body: StudyJoin, user: AuthUser = Depends(require_user)):
+    assert_actor(user, body.institution_email)
     with Session(engine) as session:
         study = session.get(Study, study_id)
         if not study:
@@ -302,38 +332,38 @@ def studies_join(study_id: int, body: StudyJoin):
         if sp and sp.status != "finalized":
             raise HTTPException(status_code=400, detail="Study kann erst Teilnehmer aufnehmen, wenn das Protocol finalisiert ist. Creator muss protocol/finalize aufrufen.")
         participants = list(session.exec(select(StudyParticipant).where(StudyParticipant.study_id == study_id)))
-        if any(p.institution_email == body.institution_email for p in participants):
+        if any(p.institution_email == user.email for p in participants):
             raise HTTPException(status_code=400, detail="Institution bereits Teilnehmer")
         part = StudyParticipant(
             study_id=study_id,
             institution_name=body.institution_name,
-            institution_email=body.institution_email,
+            institution_email=user.email,
             public_key_share=body.public_key_share,
-            key_share_committed_at=datetime.utcnow(),
+            key_share_committed_at=utc_now(),
         )
         session.add(part)
         session.commit()
         write_audit_log(
             session, study_id, "participant_joined",
-            body.institution_email,
+            user.email,
             {"institution": body.institution_name, "total_participants": len(participants) + 1},
         )
         participants = list(session.exec(select(StudyParticipant).where(StudyParticipant.study_id == study_id)))
         if not sp and len(participants) >= study.threshold_n:
-            combined = next((p.public_key_share for p in participants if p.public_key_share), "") or part.public_key_share
+            combined = _study_encryption_key(study, participants)
             if combined:
                 study.combined_public_key = combined
-                try:
-                    raw = base64.b64decode(combined) if isinstance(combined, str) else combined
-                except Exception:
-                    raw = combined.encode("utf-8") if isinstance(combined, str) else combined
-                study.public_key_fingerprint = sha3_256_hex(raw)
+                study.public_key_fingerprint = _fingerprint(combined)
                 study.status = "active"
-                study.updated_at = datetime.utcnow()
+                study.updated_at = utc_now()
                 session.add(study)
                 write_audit_log(
                     session, study_id, "study_activated", "system",
-                    {"public_key_fingerprint": study.public_key_fingerprint, "participant_count": len(participants)},
+                    {
+                        "public_key_fingerprint": study.public_key_fingerprint,
+                        "participant_count": len(participants),
+                        "key_source": "creator_public_key",
+                    },
                 )
         session.commit()
         return {
@@ -346,7 +376,7 @@ def studies_join(study_id: int, body: StudyJoin):
 
 @router.get("/{study_id}/public_key")
 def studies_public_key(study_id: int):
-    """Kombinierter Public Key, Fingerprint, und alle Upload-Commitments zur Verifikation."""
+    """Public encryption key for the study (creator's key in this prototype)."""
     with Session(engine) as session:
         study = session.get(Study, study_id)
         if not study:
@@ -355,20 +385,22 @@ def studies_public_key(study_id: int):
         return {
             "combined_public_key": study.combined_public_key,
             "public_key_fingerprint": study.public_key_fingerprint,
-            "upload_commitments": [{"dataset_name": d.dataset_name, "commitment_hash": d.commitment_hash, "institution_email": d.institution_email} for d in datasets],
+            "key_model": "creator_public_key",
+            "upload_commitments": [
+                {"dataset_name": d.dataset_name, "commitment_hash": d.commitment_hash, "institution_email": d.institution_email}
+                for d in datasets
+            ],
         }
 
 
 @router.post("/{study_id}/schema/submit")
-def studies_schema_submit(study_id: int, body: SchemaSubmit):
-    """
-    Institution reicht lokales Schema und vorgeschlagenes Mapping ein.
-    Server prüft Kompatibilität (required columns, Typen, Ranges), speichert institution_signature.
-    """
+def studies_schema_submit(study_id: int, body: SchemaSubmit, user: AuthUser = Depends(require_user)):
+    assert_actor(user, body.institution_email)
     with Session(engine) as session:
         study = session.get(Study, study_id)
         if not study:
             raise HTTPException(status_code=404, detail="Study nicht gefunden")
+        _require_participant(session, study_id, user.email)
         sp = session.exec(select(StudyProtocol).where(StudyProtocol.study_id == study_id)).first()
         if not sp or sp.status != "finalized":
             raise HTTPException(status_code=400, detail="Protocol muss finalisiert sein")
@@ -382,20 +414,21 @@ def studies_schema_submit(study_id: int, body: SchemaSubmit):
         local_schema = body.local_schema or {}
         result = check_schema_compatibility(required_columns, local_schema, body.proposed_mapping or {})
         mapping_json = json.dumps(body.proposed_mapping or {}, sort_keys=True)
-        institution_signature = sha3_256_hex(mapping_json, sp.protocol_hash, body.institution_email)
+        # Attestation hash bound to the authenticated email (not a digital signature).
+        institution_attestation = sha3_256_hex(mapping_json, sp.protocol_hash, user.email)
         sub = SchemaSubmission(
             study_id=study_id,
-            institution_email=body.institution_email,
+            institution_email=user.email,
             submitted_schema=json.dumps(local_schema),
             mapping=mapping_json,
             fingerprint=json.dumps({}),
             compatibility_result=json.dumps(result),
-            institution_signature=institution_signature,
-            signed_at=datetime.utcnow(),
+            institution_signature=institution_attestation,
+            signed_at=utc_now(),
         )
         session.add(sub)
         write_audit_log(
-            session, study_id, "schema_submitted", body.institution_email,
+            session, study_id, "schema_submitted", user.email,
             {"compatible": result["compatible"], "issue_count": len(result.get("issues", []))},
         )
         session.commit()
@@ -408,24 +441,27 @@ def studies_schema_submit(study_id: int, body: SchemaSubmit):
 
 
 @router.post("/{study_id}/synthetic/upload")
+@rate_limit("10/hour")
 def studies_synthetic_upload(
+    request: Request,
     study_id: int,
     file: UploadFile = File(...),
     institution_email: str = Form(...),
+    user: AuthUser = Depends(require_user),
 ):
-    """
-    Institution lädt synthetische (Klartext-) CSV hoch.
-    Server validiert gegen Protocol (Spalten, Typen, minimum_rows), speichert validation_result.
-    """
+    assert_actor(user, institution_email)
     with Session(engine) as session:
         study = session.get(Study, study_id)
         if not study:
             raise HTTPException(status_code=404, detail="Study nicht gefunden")
+        _require_participant(session, study_id, user.email)
         sp = session.exec(select(StudyProtocol).where(StudyProtocol.study_id == study_id)).first()
         if not sp or sp.status != "finalized":
             raise HTTPException(status_code=400, detail="Protocol muss finalisiert sein")
-        content = file.file.read()
+        content = file.file.read(MAX_UPLOAD_BYTES + 1)
         file.file.close()
+        if len(content) > MAX_UPLOAD_BYTES:
+            raise HTTPException(status_code=413, detail=f"File too large (max {MAX_UPLOAD_MB} MB)")
         try:
             required_columns = json.loads(sp.required_columns or "[]")
         except (json.JSONDecodeError, TypeError):
@@ -455,36 +491,33 @@ def studies_synthetic_upload(
         path.write_bytes(content)
         syn = SyntheticSubmission(
             study_id=study_id,
-            institution_email=institution_email,
+            institution_email=user.email,
             file_path=str(path),
             validation_result=json.dumps({"schema_valid": schema_valid, "issues": issues, "algorithms_tested": []}),
         )
         session.add(syn)
-        write_audit_log(session, study_id, "dry_run_completed", institution_email, {"schema_valid": schema_valid})
+        write_audit_log(session, study_id, "dry_run_completed", user.email, {"schema_valid": schema_valid})
         session.commit()
         return {"schema_valid": schema_valid, "issues": issues, "algorithms_tested": [], "sample_results": {}}
 
 
 @router.get("/{study_id}/activation_status")
-def studies_activation_status(study_id: int):
-    """
-    Gibt zurück ob die Study aktiviert werden kann.
-    Prüft protocol_finalized, all_schemas_compatible, dry_run_completed, all_keys_submitted.
-    """
+def studies_activation_status(study_id: int, user: AuthUser = Depends(require_user)):
     with Session(engine) as session:
+        _require_participant(session, study_id, user.email)
         return _get_activation_status(study_id, session)
 
 
 @router.post("/{study_id}/activate")
-def studies_activate(study_id: int, actor_email: str = ""):
-    """
-    Aktiviert die Study nur wenn ALLE Preconditions erfüllt sind.
-    Setzt status=active, setzt combined_public_key; schreibt schema_signatures in Audit Log.
-    """
+def studies_activate(study_id: int, actor_email: str = "", user: AuthUser = Depends(require_user)):
+    if actor_email:
+        assert_actor(user, actor_email)
     with Session(engine) as session:
         study = session.get(Study, study_id)
         if not study:
             raise HTTPException(status_code=404, detail="Study nicht gefunden")
+        if study.created_by != user.email:
+            raise HTTPException(status_code=403, detail="Nur der Study-Creator darf aktivieren")
         if study.status == "active":
             return {"status": "active", "message": "Bereits aktiv"}
         status = _get_activation_status(study_id, session)
@@ -493,50 +526,59 @@ def studies_activate(study_id: int, actor_email: str = ""):
         sp = session.exec(select(StudyProtocol).where(StudyProtocol.study_id == study_id)).first()
         participants = list(session.exec(select(StudyParticipant).where(StudyParticipant.study_id == study_id)))
         schema_submissions = list(session.exec(select(SchemaSubmission).where(SchemaSubmission.study_id == study_id)))
-        combined = next((p.public_key_share for p in participants if p.public_key_share), "") or ""
-        try:
-            raw = base64.b64decode(combined) if isinstance(combined, str) else combined
-        except Exception:
-            raw = combined.encode("utf-8") if isinstance(combined, str) else combined
+        combined = _study_encryption_key(study, participants)
         study.combined_public_key = combined
-        study.public_key_fingerprint = sha3_256_hex(raw)
+        study.public_key_fingerprint = _fingerprint(combined) if combined else ""
         study.status = "active"
-        study.updated_at = datetime.utcnow()
+        study.updated_at = utc_now()
         session.add(study)
         schema_signatures = [s.institution_signature for s in schema_submissions]
         write_audit_log(
-            session, study_id, "study_activated", actor_email or "system",
-            {"protocol_hash": sp.protocol_hash if sp else "", "participant_count": len(participants), "schema_signatures": schema_signatures},
+            session, study_id, "study_activated", user.email,
+            {
+                "protocol_hash": sp.protocol_hash if sp else "",
+                "participant_count": len(participants),
+                "schema_attestations": schema_signatures,
+                "key_source": "creator_public_key",
+            },
         )
         session.commit()
         return {"activated": True, "status": "active", "public_key_fingerprint": study.public_key_fingerprint}
 
 
 @router.post("/{study_id}/upload_dataset")
+@rate_limit("10/hour")
 def studies_upload_dataset(
+    request: Request,
     study_id: int,
     file: UploadFile = File(...),
     institution_email: str = Form(...),
     dataset_name: str = Form(""),
     columns: str = Form("[]"),
     commitment_timestamp: str = Form(""),
+    user: AuthUser = Depends(require_user),
 ):
-    """Speichert verschlüsselte Datei, berechnet Commitment, Audit dataset_uploaded. OWASP A03/A10: max size, .bin only."""
+    assert_actor(user, institution_email)
     if Path(file.filename or "").suffix.lower() not in ALLOWED_UPLOAD_EXTENSIONS:
         raise HTTPException(status_code=400, detail="Only .bin files are allowed")
     with Session(engine) as session:
         study = session.get(Study, study_id)
         if not study:
             raise HTTPException(status_code=404, detail="Study nicht gefunden")
+        _require_participant(session, study_id, user.email)
         if study.status != "active":
             raise HTTPException(status_code=400, detail="Study muss aktiv sein zum Upload")
         file_bytes = file.file.read(MAX_UPLOAD_BYTES + 1)
         if len(file_bytes) > MAX_UPLOAD_BYTES:
             raise HTTPException(status_code=413, detail=f"File too large (max {MAX_UPLOAD_MB} MB)")
         file.file.close()
-        ts_str = commitment_timestamp.strip() or datetime.utcnow().isoformat()
+        try:
+            load_bundle(file_bytes)
+        except BundleError as e:
+            raise HTTPException(status_code=400, detail=f"Invalid ciphertext bundle: {e}") from e
+        ts_str = commitment_timestamp.strip() or _ts(utc_now())
         fp = study.public_key_fingerprint or ""
-        commitment_hash = sha3_256_hex(file_bytes, fp, ts_str, institution_email)
+        commitment_hash = sha3_256_hex(file_bytes, fp, ts_str, user.email)
         study_dir = STUDIES_UPLOADS_DIR / str(study_id)
         study_dir.mkdir(parents=True, exist_ok=True)
         path = study_dir / f"{uuid.uuid4().hex}.bin"
@@ -548,16 +590,16 @@ def studies_upload_dataset(
         sd = StudyDataset(
             study_id=study_id,
             dataset_name=dataset_name or file.filename or "dataset",
-            institution_email=institution_email,
+            institution_email=user.email,
             file_path=str(path),
             commitment_hash=commitment_hash,
             columns=json.dumps(cols) if isinstance(cols, list) else "[]",
-            committed_at=datetime.utcnow(),
+            committed_at=utc_now(),
         )
         session.add(sd)
         session.commit()
         write_audit_log(
-            session, study_id, "dataset_uploaded", institution_email,
+            session, study_id, "dataset_uploaded", user.email,
             {"commitment_hash": commitment_hash, "dataset_name": sd.dataset_name, "size_bytes": len(file_bytes)},
         )
         session.commit()
@@ -565,12 +607,15 @@ def studies_upload_dataset(
 
 
 @router.post("/{study_id}/request_computation")
-def studies_request_computation(study_id: int, body: StudyRequestComputation):
-    """Prüft allowed_algorithms, erstellt Job (pending_approval), Audit computation_requested."""
+def studies_request_computation(
+    study_id: int, body: StudyRequestComputation, user: AuthUser = Depends(require_user)
+):
+    assert_actor(user, body.requester_email)
     with Session(engine) as session:
         study = session.get(Study, study_id)
         if not study:
             raise HTTPException(status_code=404, detail="Study nicht gefunden")
+        _require_participant(session, study_id, user.email)
         if study.status != "active":
             raise HTTPException(status_code=400, detail="Study muss aktiv sein")
         try:
@@ -580,10 +625,12 @@ def studies_request_computation(study_id: int, body: StudyRequestComputation):
             allowed = []
         if allowed and body.algorithm not in allowed:
             raise HTTPException(status_code=400, detail=f"Algorithmus {body.algorithm} nicht erlaubt")
+        if body.algorithm not in ALGORITHM_REGISTRY:
+            raise HTTPException(status_code=400, detail="Algorithm not in approved registry")
         job = Job(
             study_id=study_id,
             dataset_id=None,
-            requester_email=body.requester_email,
+            requester_email=user.email,
             algorithm=body.algorithm,
             computation_type=body.algorithm,
             selected_columns=json.dumps(body.selected_columns),
@@ -594,7 +641,7 @@ def studies_request_computation(study_id: int, body: StudyRequestComputation):
         session.commit()
         session.refresh(job)
         write_audit_log(
-            session, study_id, "computation_requested", body.requester_email,
+            session, study_id, "computation_requested", user.email,
             {"job_id": job.id, "algorithm": body.algorithm, "selected_columns": body.selected_columns},
         )
         session.commit()
@@ -602,8 +649,11 @@ def studies_request_computation(study_id: int, body: StudyRequestComputation):
 
 
 @router.post("/{study_id}/jobs/{job_id}/approve")
-def studies_job_approve(study_id: int, job_id: int, body: StudyApprove):
-    """Sammelt Approvals; bei Vollzahl: Berechnung auf kombinierten Study-Daten, Ergebnis verschlüsselt, status awaiting_decryption."""
+def studies_job_approve(
+    study_id: int, job_id: int, body: StudyApprove, user: AuthUser = Depends(require_user)
+):
+    """Collect authorizations. At threshold, run HE on all study datasets (no decrypt)."""
+    assert_actor(user, body.institution_email)
     with Session(engine) as session:
         study = session.get(Study, study_id)
         job = session.get(Job, job_id)
@@ -611,63 +661,81 @@ def studies_job_approve(study_id: int, job_id: int, body: StudyApprove):
             raise HTTPException(status_code=404, detail="Study oder Job nicht gefunden")
         if job.status != "pending_approval":
             raise HTTPException(status_code=400, detail=f"Job hat status {job.status}")
-        participant = session.exec(
-            select(StudyParticipant).where(
-                StudyParticipant.study_id == study_id,
-                StudyParticipant.institution_email == body.institution_email,
-            )
+        participant = _require_participant(session, study_id, user.email)
+        existing = session.exec(
+            select(JobApproval).where(JobApproval.job_id == job_id, JobApproval.institution_email == user.email)
         ).first()
-        if not participant:
-            raise HTTPException(status_code=403, detail="Institution ist kein Teilnehmer")
-        existing = session.exec(select(JobApproval).where(JobApproval.job_id == job_id, JobApproval.institution_email == body.institution_email)).first()
         if existing:
             raise HTTPException(status_code=400, detail="Bereits genehmigt")
-        session.add(JobApproval(job_id=job_id, institution_email=body.institution_email))
+        session.add(JobApproval(job_id=job_id, institution_email=user.email))
+        participant.has_approved_result = True
+        session.add(participant)
         session.commit()
         approvals = list(session.exec(select(JobApproval).where(JobApproval.job_id == job_id)))
         if len(approvals) < study.threshold_t:
-            return {"job_id": job_id, "status": "pending_approval", "approvals": len(approvals), "required": study.threshold_t}
+            return {
+                "job_id": job_id,
+                "status": "pending_approval",
+                "approvals": len(approvals),
+                "required": study.threshold_t,
+            }
         datasets = list(session.exec(select(StudyDataset).where(StudyDataset.study_id == study_id)))
         if not datasets:
             raise HTTPException(status_code=400, detail="Keine Datensätze in der Study")
-        path = Path(datasets[0].file_path)
-        if not path.exists():
+        missing = [d.file_path for d in datasets if not Path(d.file_path).exists()]
+        if missing:
             raise HTTPException(status_code=404, detail="Dataset-Datei nicht gefunden")
-        with open(path, "rb") as f:
-            bundle = pickle.load(f)
         algorithm = job.algorithm or "mean"
-        if algorithm not in ALGORITHM_REGISTRY or algorithm not in ALGORITHMS:
+        if algorithm not in ALGORITHM_REGISTRY:
             raise HTTPException(status_code=400, detail="Algorithm not in approved registry")
         try:
             sel_cols = json.loads(job.selected_columns or "[]")
         except (json.JSONDecodeError, TypeError):
             sel_cols = []
         try:
-            result_obj = ALGORITHMS[algorithm](bundle, sel_cols)
+            params = json.loads(job.parameters or "{}")
+        except (json.JSONDecodeError, TypeError):
+            params = {}
+        paths = [d.file_path for d in datasets]
+        try:
+            result_obj = run_he(run_on_datasets, paths, algorithm, sel_cols, params)
+        except BundleError as e:
+            raise HTTPException(status_code=400, detail=str(e)) from e
+        except ComputeBusyError as e:
+            raise HTTPException(status_code=503, detail=str(e)) from e
+        except ComputeTimeoutError as e:
+            raise HTTPException(status_code=504, detail=str(e)) from e
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e)) from e
         except Exception:
-            import logging
-            logging.getLogger("securecollab").exception("HE computation failed for study job %s", job_id)
+            _log.exception("HE computation failed for study job %s", job_id)
             raise HTTPException(status_code=500, detail="Computation failed. Check algorithm and columns.")
         result_json_str = json.dumps(result_obj)
-        result_bytes = result_json_str.encode("utf-8")
-        result_commitment = sha3_256_hex(result_bytes)
+        result_commitment = sha3_256_hex(result_json_str.encode("utf-8"))
         job.result_json = result_json_str
         job.result_commitment = result_commitment
-        if isinstance(result_obj, dict) and "mean" in result_obj:
-            job.result = float(result_obj["mean"])
+        job.result = None
         job.status = "awaiting_decryption"
         session.add(job)
         write_audit_log(
             session, study_id, "computation_executed", "system",
-            {"job_id": job_id, "algorithm": algorithm, "result_commitment": result_commitment},
+            {"job_id": job_id, "algorithm": algorithm, "result_commitment": result_commitment, "encrypted": True},
         )
         session.commit()
-        return {"job_id": job_id, "status": "awaiting_decryption", "result_commitment": result_commitment}
+        return {
+            "job_id": job_id,
+            "status": "awaiting_decryption",
+            "result_commitment": result_commitment,
+            "encrypted": True,
+        }
 
 
 @router.post("/{study_id}/jobs/{job_id}/submit_decryption_share")
-def studies_job_submit_decryption_share(study_id: int, job_id: int, body: StudySubmitDecryptionShare):
-    """Sammelt Decryption Shares; bei >= threshold_t: Kombination zu Ergebnis, Audit result_decrypted."""
+def studies_job_submit_decryption_share(
+    study_id: int, job_id: int, body: StudySubmitDecryptionShare, user: AuthUser = Depends(require_user)
+):
+    """Authorization to release the encrypted result. Shares are not cryptographic partial decrypts."""
+    assert_actor(user, body.institution_email)
     with Session(engine) as session:
         study = session.get(Study, study_id)
         job = session.get(Job, job_id)
@@ -675,29 +743,47 @@ def studies_job_submit_decryption_share(study_id: int, job_id: int, body: StudyS
             raise HTTPException(status_code=404, detail="Study oder Job nicht gefunden")
         if job.status != "awaiting_decryption":
             raise HTTPException(status_code=400, detail=f"Job hat status {job.status}")
-        existing = session.exec(select(JobDecryptionShare).where(JobDecryptionShare.job_id == job_id, JobDecryptionShare.institution_email == body.institution_email)).first()
+        _require_participant(session, study_id, user.email)
+        existing = session.exec(
+            select(JobDecryptionShare).where(
+                JobDecryptionShare.job_id == job_id,
+                JobDecryptionShare.institution_email == user.email,
+            )
+        ).first()
         if existing:
             raise HTTPException(status_code=400, detail="Decryption Share bereits eingereicht")
-        session.add(JobDecryptionShare(job_id=job_id, institution_email=body.institution_email, decryption_share=body.decryption_share))
+        session.add(JobDecryptionShare(
+            job_id=job_id,
+            institution_email=user.email,
+            decryption_share=body.decryption_share,
+        ))
         session.commit()
         shares = list(session.exec(select(JobDecryptionShare).where(JobDecryptionShare.job_id == job_id)))
         if len(shares) < study.threshold_t:
-            return {"job_id": job_id, "status": "awaiting_decryption", "shares": len(shares), "required": study.threshold_t}
+            return {
+                "job_id": job_id,
+                "status": "awaiting_decryption",
+                "shares": len(shares),
+                "required": study.threshold_t,
+            }
         job.status = "completed"
         session.add(job)
-        write_audit_log(session, study_id, "result_decrypted", body.institution_email, {"job_id": job_id, "shares_combined": len(shares)})
+        write_audit_log(
+            session, study_id, "result_released", user.email,
+            {"job_id": job_id, "authorizations": len(shares), "encrypted": True},
+        )
         session.commit()
         result_json = json.loads(job.result_json) if job.result_json else None
-        return {"job_id": job_id, "status": "completed", "result_json": result_json}
+        return {"job_id": job_id, "status": "completed", "result_json": result_json, "encrypted": True}
 
 
 @router.get("/{study_id}/audit_trail")
-def studies_audit_trail(study_id: int):
-    """Vollständiger Audit Trail; entry_hash = SHA3-256(action_type||actor||details||timestamp||previous_hash)."""
+def studies_audit_trail(study_id: int, user: AuthUser = Depends(require_user)):
     with Session(engine) as session:
         study = session.get(Study, study_id)
         if not study:
             raise HTTPException(status_code=404, detail="Study nicht gefunden")
+        _require_participant(session, study_id, user.email)
         entries = list(session.exec(select(AuditLog).where(AuditLog.study_id == study_id).order_by(AuditLog.id)))
         return [
             {
@@ -707,22 +793,19 @@ def studies_audit_trail(study_id: int):
                 "details": json.loads(e.details) if e.details else {},
                 "previous_hash": e.previous_hash,
                 "entry_hash": e.entry_hash,
-                "created_at": e.created_at.isoformat(),
+                "created_at": _ts(e.created_at),
             }
             for e in entries
         ]
 
 
 @router.get("/{study_id}/protocol")
-def studies_protocol(study_id: int):
-    """
-    Vollständiges Study-Protokoll (regulatorische Dokumentation).
-    Enthält protocol_hash und required_columns aus study_protocol falls vorhanden.
-    """
+def studies_protocol(study_id: int, user: AuthUser = Depends(require_user)):
     with Session(engine) as session:
         study = session.get(Study, study_id)
         if not study:
             raise HTTPException(status_code=404, detail="Study nicht gefunden")
+        _require_participant(session, study_id, user.email)
         participants = list(session.exec(select(StudyParticipant).where(StudyParticipant.study_id == study_id)))
         datasets = list(session.exec(select(StudyDataset).where(StudyDataset.study_id == study_id)))
         jobs = list(session.exec(select(Job).where(Job.study_id == study_id)))
@@ -736,10 +819,25 @@ def studies_protocol(study_id: int):
         required_columns = protocol_data.get("column_definitions", [])
         if sp:
             protocol_hash = sp.protocol_hash
-            try:
-                required_columns = json.loads(sp.required_columns or "[]")
-            except (json.JSONDecodeError, TypeError):
-                pass
+            pc_rows = list(session.exec(select(ProtocolColumn).where(ProtocolColumn.protocol_id == sp.id)))
+            if pc_rows:
+                required_columns = [
+                    {
+                        "name": pc.column_name,
+                        "aliases": json.loads(pc.aliases or "[]"),
+                        "data_type": pc.data_type,
+                        "unit": pc.unit,
+                        "valid_range": [pc.valid_range_min, pc.valid_range_max],
+                        "required": pc.required,
+                        "description": pc.description,
+                    }
+                    for pc in pc_rows
+                ]
+            else:
+                try:
+                    required_columns = json.loads(sp.required_columns or "[]")
+                except (json.JSONDecodeError, TypeError):
+                    pass
         return {
             "study_metadata": {
                 "id": study.id,
@@ -750,8 +848,8 @@ def studies_protocol(study_id: int):
                 "threshold_t": study.threshold_t,
                 "public_key_fingerprint": study.public_key_fingerprint,
                 "created_by": study.created_by,
-                "created_at": study.created_at.isoformat(),
-                "updated_at": study.updated_at.isoformat(),
+                "created_at": _ts(study.created_at),
+                "updated_at": _ts(study.updated_at),
             },
             "protocol_hash": protocol_hash,
             "required_columns": required_columns,
@@ -759,12 +857,32 @@ def studies_protocol(study_id: int):
             "minimum_rows": sp.minimum_rows if sp else 1,
             "missing_value_strategy": sp.missing_value_strategy if sp else "exclude",
             "participants": [
-                {"institution_name": p.institution_name, "institution_email": p.institution_email, "joined_at": p.joined_at.isoformat()}
+                {"institution_name": p.institution_name, "institution_email": p.institution_email, "joined_at": _ts(p.joined_at)}
                 for p in participants
             ],
             "allowed_algorithms": protocol_data.get("allowed_algorithms", []),
             "column_definitions": required_columns,
-            "datasets": [{"dataset_name": d.dataset_name, "institution_email": d.institution_email, "commitment_hash": d.commitment_hash, "committed_at": d.committed_at.isoformat()} for d in datasets],
-            "jobs": [{"id": j.id, "requester_email": j.requester_email, "algorithm": j.algorithm, "status": j.status, "created_at": j.created_at.isoformat()} for j in jobs],
-            "audit_summary": {"total_entries": len(audit_entries), "last_entry_hash": audit_entries[-1].entry_hash if audit_entries else None},
+            "datasets": [
+                {
+                    "dataset_name": d.dataset_name,
+                    "institution_email": d.institution_email,
+                    "commitment_hash": d.commitment_hash,
+                    "committed_at": _ts(d.committed_at),
+                }
+                for d in datasets
+            ],
+            "jobs": [
+                {
+                    "id": j.id,
+                    "requester_email": j.requester_email,
+                    "algorithm": j.algorithm,
+                    "status": j.status,
+                    "created_at": _ts(j.created_at),
+                }
+                for j in jobs
+            ],
+            "audit_summary": {
+                "total_entries": len(audit_entries),
+                "last_entry_hash": audit_entries[-1].entry_hash if audit_entries else None,
+            },
         }

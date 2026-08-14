@@ -4,6 +4,8 @@ from datetime import datetime
 
 from sqlmodel import Field, SQLModel
 
+from app.core.timeutils import utc_now
+
 
 class StudyParticipant(SQLModel, table=True):
     __tablename__ = "study_participants"
@@ -14,4 +16,4 @@ class StudyParticipant(SQLModel, table=True):
     public_key_share: str = ""
     key_share_committed_at: datetime | None = None
     has_approved_result: bool = False
-    joined_at: datetime = Field(default_factory=datetime.utcnow)
+    joined_at: datetime = Field(default_factory=utc_now)

@@ -29,12 +29,6 @@ class StudyJoin(BaseModel):
     public_key_share: str
 
 
-class StudyUploadDatasetForm(BaseModel):
-    institution_email: str
-    dataset_name: str
-    columns: list[str] = []
-
-
 class StudyRequestComputation(BaseModel):
     requester_email: str
     algorithm: str
@@ -78,8 +72,8 @@ class LocalColumnDesc(BaseModel):
 
 class SchemaSubmit(BaseModel):
     institution_email: str
-    local_schema: dict
-    proposed_mapping: dict
+    local_schema: dict  # {columns: [LocalColumnDesc as dict]}
+    proposed_mapping: dict[str, str]
 
 
 class ProtocolFinalize(BaseModel):

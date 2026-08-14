@@ -5,6 +5,7 @@ from datetime import datetime
 from sqlmodel import Field, SQLModel
 
 from app.config import INITIAL_HASH
+from app.core.timeutils import utc_now
 
 
 class AuditLog(SQLModel, table=True):
@@ -16,4 +17,4 @@ class AuditLog(SQLModel, table=True):
     details: str = "{}"
     previous_hash: str = INITIAL_HASH
     entry_hash: str = ""
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=utc_now)

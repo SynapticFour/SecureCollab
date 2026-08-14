@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import json
 import uuid
-from datetime import datetime
 from pathlib import Path
 
 # Ensure app is importable when run as script
@@ -18,6 +17,7 @@ if __name__ == "__main__" and (sys.path[0] or ".") != ".":
 try:
     from app.config import settings
     from app.core.security import sha3_256_hex
+    from app.core.timeutils import utc_now
     from app.database import Session, create_db_and_tables, engine
     from app.models import (
         Job,
@@ -68,7 +68,7 @@ def run_seed() -> dict:
 
         # 1) Study + creator participant (with dummy key so activation can succeed)
         protocol_json = json.dumps({
-            "allowed_algorithms": ["mean", "variance", "descriptive_statistics"],
+            "allowed_algorithms": ["mean", "descriptive_statistics"],
             "column_definitions": REQUIRED_COLUMNS,
         })
         study = Study(
@@ -90,7 +90,7 @@ def run_seed() -> dict:
             institution_name=DEMO_CREATOR_NAME,
             institution_email=DEMO_CREATOR,
             public_key_share="dummy_key_creator",
-            key_share_committed_at=datetime.utcnow(),
+            key_share_committed_at=utc_now(),
         )
         session.add(part1)
         session.commit()
@@ -129,7 +129,7 @@ def run_seed() -> dict:
         session.commit()
 
         sp.status = "finalized"
-        sp.finalized_at = datetime.utcnow()
+        sp.finalized_at = utc_now()
         session.add(sp)
         write_audit_log(session, study_id, "protocol_finalized", DEMO_CREATOR, {"protocol_hash": protocol_hash})
         session.commit()
@@ -140,7 +140,7 @@ def run_seed() -> dict:
             institution_name=DEMO_PARTICIPANT_NAME,
             institution_email=DEMO_PARTICIPANT_EMAIL,
             public_key_share="dummy_key_participant",
-            key_share_committed_at=datetime.utcnow(),
+            key_share_committed_at=utc_now(),
         )
         session.add(part2)
         session.commit()
@@ -165,7 +165,7 @@ def run_seed() -> dict:
                 fingerprint=json.dumps({}),
                 compatibility_result=json.dumps(result),
                 institution_signature=sig,
-                signed_at=datetime.utcnow(),
+                signed_at=utc_now(),
             )
             session.add(sub)
             write_audit_log(
@@ -193,46 +193,55 @@ def run_seed() -> dict:
         study.status = "active"
         study.combined_public_key = "dummy_combined"
         study.public_key_fingerprint = sha3_256_hex(b"dummy_combined")
-        study.updated_at = datetime.utcnow()
+        study.updated_at = utc_now()
         session.add(study)
         schema_subs = list(session.exec(select(SchemaSubmission).where(SchemaSubmission.study_id == study_id)))
         write_audit_log(
             session, study_id, "study_activated", "system",
-            {"protocol_hash": protocol_hash, "participant_count": 2, "schema_signatures": [s.institution_signature for s in schema_subs]},
+            {
+                "protocol_hash": protocol_hash,
+                "participant_count": 2,
+                "schema_attestations": [s.institution_signature for s in schema_subs],
+                "key_source": "creator_public_key",
+            },
         )
         session.commit()
 
-        # 7) Optional: one study dataset (placeholder .bin so UI shows something)
-        try:
-            import pickle
-            placeholder = {"n": 1, "columns": "[]", "public_context": b"demo", "secret_context": b"demo", "vectors": {}}
-            bin_path = study_dir / f"{uuid.uuid4().hex}.bin"
-            bin_path.write_bytes(pickle.dumps(placeholder))
-            ts_str = datetime.utcnow().isoformat()
-            commitment_hash = sha3_256_hex(bin_path.read_bytes(), study.public_key_fingerprint, ts_str, DEMO_CREATOR)
-            sd = StudyDataset(
-                study_id=study_id,
-                dataset_name="demo_dataset",
-                institution_email=DEMO_CREATOR,
-                file_path=str(bin_path),
-                commitment_hash=commitment_hash,
-                columns=json.dumps(["value", "id"]),
-                committed_at=datetime.utcnow(),
-            )
-            session.add(sd)
-            write_audit_log(
-                session, study_id, "dataset_uploaded", DEMO_CREATOR,
-                {"commitment_hash": commitment_hash, "dataset_name": "demo_dataset", "size_bytes": len(placeholder)},
-            )
-            session.commit()
-        except Exception:
-            pass  # optional
+        # 7) Placeholder JSON bundle (no secret_context, not pickle)
+        from app.core.timeutils import audit_timestamp
+        from app.services.bundle import dump_bundle
 
-        # 8) One pending job
+        blob = dump_bundle({
+            "public_context": b"demo-public-context-placeholder",
+            "vectors": {"value": b"demo-ciphertext-placeholder"},
+            "columns": ["value", "id"],
+            "n": 1,
+        })
+        bin_path = study_dir / f"{uuid.uuid4().hex}.bin"
+        bin_path.write_bytes(blob)
+        ts_str = audit_timestamp(utc_now())
+        commitment_hash = sha3_256_hex(blob, study.public_key_fingerprint, ts_str, DEMO_CREATOR)
+        sd = StudyDataset(
+            study_id=study_id,
+            dataset_name="demo_dataset",
+            institution_email=DEMO_CREATOR,
+            file_path=str(bin_path),
+            commitment_hash=commitment_hash,
+            columns=json.dumps(["value", "id"]),
+            committed_at=utc_now(),
+        )
+        session.add(sd)
+        write_audit_log(
+            session, study_id, "dataset_uploaded", DEMO_CREATOR,
+            {"commitment_hash": commitment_hash, "dataset_name": "demo_dataset", "size_bytes": len(blob)},
+        )
+        session.commit()
+
+        # 8) One pending job (requester is a participant)
         job = Job(
             study_id=study_id,
             dataset_id=None,
-            requester_email="researcher@test.com",
+            requester_email=DEMO_CREATOR,
             algorithm="mean",
             computation_type="mean",
             selected_columns=json.dumps(["value"]),
@@ -242,7 +251,7 @@ def run_seed() -> dict:
         session.add(job)
         session.commit()
         write_audit_log(
-            session, study_id, "computation_requested", "researcher@test.com",
+            session, study_id, "computation_requested", DEMO_CREATOR,
             {"job_id": job.id, "algorithm": "mean", "selected_columns": ["value"]},
         )
         session.commit()

@@ -4,6 +4,8 @@ from datetime import datetime
 
 from sqlmodel import Field, SQLModel
 
+from app.core.timeutils import utc_now
+
 
 class Study(SQLModel, table=True):
     __tablename__ = "studies"
@@ -17,8 +19,8 @@ class Study(SQLModel, table=True):
     public_key_fingerprint: str = ""
     combined_public_key: str = ""
     created_by: str = ""
-    created_at: datetime = Field(default_factory=datetime.utcnow)
-    updated_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=utc_now)
+    updated_at: datetime = Field(default_factory=utc_now)
 
 
 class StudyDataset(SQLModel, table=True):
@@ -30,7 +32,7 @@ class StudyDataset(SQLModel, table=True):
     file_path: str = ""
     commitment_hash: str = ""
     columns: str = "[]"
-    committed_at: datetime = Field(default_factory=datetime.utcnow)
+    committed_at: datetime = Field(default_factory=utc_now)
 
 
 class StudyProtocol(SQLModel, table=True):
@@ -42,7 +44,7 @@ class StudyProtocol(SQLModel, table=True):
     minimum_rows: int = 1
     missing_value_strategy: str = "exclude"
     protocol_hash: str = ""
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=utc_now)
     finalized_at: datetime | None = None
     status: str = "draft"
 
@@ -72,7 +74,7 @@ class SchemaSubmission(SQLModel, table=True):
     fingerprint: str = "{}"
     compatibility_result: str = "{}"
     institution_signature: str = ""
-    submitted_at: datetime = Field(default_factory=datetime.utcnow)
+    submitted_at: datetime = Field(default_factory=utc_now)
     signed_at: datetime | None = None
 
 
@@ -83,4 +85,4 @@ class SyntheticSubmission(SQLModel, table=True):
     institution_email: str = ""
     file_path: str = ""
     validation_result: str = "{}"
-    submitted_at: datetime = Field(default_factory=datetime.utcnow)
+    submitted_at: datetime = Field(default_factory=utc_now)

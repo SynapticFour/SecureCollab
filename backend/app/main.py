@@ -1,32 +1,39 @@
 # SPDX-License-Identifier: Apache-2.0
 """FastAPI app factory. Thin layer: security middleware + routers only."""
-from fastapi import FastAPI
+from __future__ import annotations
+
+from contextlib import asynccontextmanager
+
+from fastapi import Depends, FastAPI
+from sqlmodel import select
 
 from app.config import settings
 from app.core.algorithms import ALGORITHM_REGISTRY
-from app.core.security import add_security_middleware, get_limiter
+from app.core.security import AuthUser, add_security_middleware, assert_actor, get_limiter, require_user
+from app.core.timeutils import audit_timestamp
 from app.database import Session, create_db_and_tables, engine
 from app.models import Dataset, Job
 from app.routers import datasets, jobs, participants, studies, system
-from sqlmodel import select
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    settings.upload_dir_path.mkdir(parents=True, exist_ok=True)
+    settings.studies_upload_dir_path.mkdir(parents=True, exist_ok=True)
+    create_db_and_tables()
+    if settings.compute_codebase_hash_on_startup:
+        from app.services.integrity_service import get_deployment_integrity
+        get_deployment_integrity()
+    yield
 
 
 def create_app() -> FastAPI:
-    app = FastAPI(title="SecureCollab API", version="0.1.0")
+    app = FastAPI(title="SecureCollab API", version="0.1.0", lifespan=lifespan)
     limiter = get_limiter()
     if limiter is not None:
         app.state.limiter = limiter
 
     add_security_middleware(app)
-
-    @app.on_event("startup")
-    def on_startup():
-        settings.upload_dir_path.mkdir(parents=True, exist_ok=True)
-        settings.studies_upload_dir_path.mkdir(parents=True, exist_ok=True)
-        create_db_and_tables()
-        if settings.compute_codebase_hash_on_startup:
-            from app.services.integrity_service import get_deployment_integrity
-            get_deployment_integrity()
 
     app.include_router(studies.router, prefix="/studies")
     app.include_router(datasets.router, prefix="/datasets")
@@ -40,30 +47,39 @@ def create_app() -> FastAPI:
         return ALGORITHM_REGISTRY
 
     @app.get("/access/datasets/{owner_email}")
-    def access_datasets_by_owner(owner_email: str):
-        """Per dataset of owner: list of researcher emails with completed jobs + first completed date."""
+    def access_datasets_by_owner(owner_email: str, user: AuthUser = Depends(require_user)):
+        """Per dataset of owner: researchers with completed jobs (one SQL join)."""
+        assert_actor(user, owner_email)
         with Session(engine) as session:
-            datasets_list = list(session.exec(select(Dataset).where(Dataset.owner_email == owner_email)))
+            stmt = (
+                select(Dataset.id, Dataset.name, Job.requester_email, Job.created_at)
+                .join(Job, Job.dataset_id == Dataset.id)
+                .where(Dataset.owner_email == user.email, Job.status == "completed")
+                .order_by(Dataset.id, Job.created_at.asc())
+            )
+            rows = session.exec(stmt).all()
+            by_ds: dict[int, dict] = {}
+            for ds_id, ds_name, email, created_at in rows:
+                bucket = by_ds.setdefault(ds_id, {"dataset_id": ds_id, "dataset_name": ds_name, "researchers": {}, "order": []})
+                if email not in bucket["researchers"]:
+                    bucket["researchers"][email] = created_at
+                    bucket["order"].append(email)
+            # Include owned datasets with no completed jobs
+            owned = session.exec(select(Dataset).where(Dataset.owner_email == user.email)).all()
             result = []
-            for d in datasets_list:
-                stmt = (
-                    select(Job.requester_email, Job.created_at)
-                    .where(Job.dataset_id == d.id, Job.status == "completed")
-                    .order_by(Job.created_at.asc())
-                )
-                rows = session.exec(stmt).all()
-                by_email = {}
-                for email, created_at in rows:
-                    if email not in by_email:
-                        by_email[email] = created_at
-                result.append({
-                    "dataset_id": d.id,
-                    "dataset_name": d.name,
-                    "researchers": [
-                        {"email": email, "first_completed_at": dt.isoformat()}
-                        for email, dt in by_email.items()
-                    ],
-                })
+            for d in owned:
+                if d.id in by_ds:
+                    b = by_ds[d.id]
+                    result.append({
+                        "dataset_id": d.id,
+                        "dataset_name": d.name,
+                        "researchers": [
+                            {"email": email, "first_completed_at": audit_timestamp(b["researchers"][email])}
+                            for email in b["order"]
+                        ],
+                    })
+                else:
+                    result.append({"dataset_id": d.id, "dataset_name": d.name, "researchers": []})
             return result
 
     return app

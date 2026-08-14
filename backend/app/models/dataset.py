@@ -4,6 +4,8 @@ from datetime import datetime
 
 from sqlmodel import Field, SQLModel
 
+from app.core.timeutils import utc_now
+
 
 class Dataset(SQLModel, table=True):
     __tablename__ = "datasets"
@@ -14,4 +16,4 @@ class Dataset(SQLModel, table=True):
     owner_email: str
     columns: str = "[]"
     organization: str = ""
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=utc_now)

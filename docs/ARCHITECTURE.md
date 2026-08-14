@@ -14,7 +14,7 @@ Key design decisions for SecureCollab.
 ## Why SQLite for Phase 0, PostgreSQL for Phase 1
 
 - **Phase 0:** SQLite keeps setup minimal; no separate DB server. Single file, easy backup. Sufficient for demos and small multi-party trials.
-- **Phase 1:** Switch by changing `DATABASE_URL` to a PostgreSQL connection string. SQLModel/SQLAlchemy work with both; no application code change. PostgreSQL gives concurrency, replication, and compliance-friendly tooling.
+- **Phase 1:** Switch by changing `DATABASE_URL` or `SECURECOLLAB_DATABASE_URL` to a PostgreSQL connection string. SQLModel/SQLAlchemy work with both; no application code change. PostgreSQL gives concurrency, replication, and compliance-friendly tooling.
 
 ## Why TenSEAL/CKKS over TFHE
 
@@ -43,12 +43,12 @@ Key design decisions for SecureCollab.
 
 1. **Institution (SDK):** Raw CSV → encrypted per-column CKKS vectors → `.bin` bundle. Commitment = hash(ciphertext || public_key_fingerprint || timestamp || institution_id). Only ciphertext and commitment leave the machine.
 2. **Upload:** Server stores `.bin` and commitment; never sees plaintext.
-3. **Computation:** Server runs HE algorithms on ciphertext; result is still encrypted (or partially decrypted in threshold model).
-4. **Result release:** After threshold decryption shares are submitted, the result is combined and returned. Server never sees raw data; only aggregated result after release.
+3. **Computation:** Server runs HE algorithms on ciphertext and stores **encrypted** sufficient statistics. It never holds a secret key.
+4. **Result release:** After `t` institutions authorize, the encrypted blob is returned. Plaintext is produced only locally with `finalize_encrypted_result`.
 
 ```
-[Institution] --(ciphertext + commitment)--> [Server] --(HE compute)--> [Encrypted result]
+[Institution] --(JSON bundle + commitment)--> [Server] --(HE compute, no decrypt)--> [Encrypted result]
                                                                               |
-[Institution] <--(decryption share)-------------------------------------------+
-     + other institutions' shares => combined plaintext result
+[Institution] <--(authorization share to release blob)------------------------+
+     local finalize with secret context => plaintext statistics
 ```

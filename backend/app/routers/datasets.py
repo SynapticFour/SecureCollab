@@ -1,10 +1,13 @@
 # SPDX-License-Identifier: Apache-2.0
-"""Dataset upload, list, columns, accessible."""
+"""Dataset upload, list, columns, accessible. Identity from X-User-Email."""
+from __future__ import annotations
+
 import json
 import uuid
 from pathlib import Path
 
-from fastapi import APIRouter, File, Form, HTTPException, Request, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
+from sqlmodel import select
 
 from app.config import (
     ALLOWED_UPLOAD_EXTENSIONS,
@@ -13,12 +16,27 @@ from app.config import (
     MAX_UPLOAD_MB,
     UPLOADS_DIR,
 )
-from app.core.security import rate_limit, sanitize_text, secure_filename
+from app.core.security import AuthUser, assert_actor, rate_limit, require_user, sanitize_text, secure_filename
+from app.core.timeutils import audit_timestamp
 from app.database import Session, engine
 from app.models import Dataset, Job
-from sqlmodel import select
+from app.services.bundle import BundleError, load_bundle
 
 router = APIRouter(tags=["datasets"])
+
+
+async def _read_limited(file: UploadFile, max_bytes: int) -> bytes:
+    chunks: list[bytes] = []
+    total = 0
+    while True:
+        chunk = await file.read(1024 * 1024)
+        if not chunk:
+            break
+        total += len(chunk)
+        if total > max_bytes:
+            raise HTTPException(status_code=413, detail=f"File too large (max {MAX_UPLOAD_MB} MB)")
+        chunks.append(chunk)
+    return b"".join(chunks)
 
 
 @router.post("/upload")
@@ -32,8 +50,10 @@ async def datasets_upload(
     organization: str = Form(""),
     columns: str = Form("[]"),
     declared_rows: str = Form(""),
+    user: AuthUser = Depends(require_user),
 ):
-    """Binary file + form fields. Max size, .bin only, path traversal prevention."""
+    """Binary file + form fields. Owner is the authenticated user. JSON bundles only."""
+    assert_actor(user, owner_email)
     if Path(file.filename or "").suffix.lower() not in ALLOWED_UPLOAD_EXTENSIONS:
         raise HTTPException(status_code=400, detail="Only .bin files are allowed")
     safe_name = secure_filename(file.filename or "encrypted.bin")
@@ -47,9 +67,11 @@ async def datasets_upload(
         file_path.relative_to(uploads_resolved)
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid upload path")
-    contents = await file.read()
-    if len(contents) > MAX_UPLOAD_BYTES:
-        raise HTTPException(status_code=413, detail=f"File too large (max {MAX_UPLOAD_MB} MB)")
+    contents = await _read_limited(file, MAX_UPLOAD_BYTES)
+    try:
+        load_bundle(contents)
+    except BundleError as e:
+        raise HTTPException(status_code=400, detail=f"Invalid ciphertext bundle: {e}") from e
     if declared_rows:
         try:
             n_rows = int(declared_rows)
@@ -58,6 +80,8 @@ async def datasets_upload(
             max_plausible = n_cols * max(n_rows, 1) * CKKS_BYTES_PER_SLOT_HEURISTIC * 2
             if len(contents) > max_plausible:
                 raise HTTPException(status_code=400, detail="File size exceeds plausible range for declared columns/rows")
+        except HTTPException:
+            raise
         except (ValueError, json.JSONDecodeError):
             pass
     file_path.parent.mkdir(parents=True, exist_ok=True)
@@ -77,7 +101,7 @@ async def datasets_upload(
             name=name,
             description=description,
             file_path=str(file_path),
-            owner_email=owner_email[:254],
+            owner_email=user.email[:254],
             organization=organization or "",
             columns=columns_clean,
         )
@@ -88,7 +112,7 @@ async def datasets_upload(
 
 
 @router.get("/{dataset_id}/columns")
-def dataset_columns(dataset_id: int):
+def dataset_columns(dataset_id: int, user: AuthUser = Depends(require_user)):
     """Return stored column names as array."""
     with Session(engine) as session:
         dataset = session.get(Dataset, dataset_id)
@@ -102,10 +126,10 @@ def dataset_columns(dataset_id: int):
 
 
 @router.get("")
-def datasets_list():
-    """All datasets with organization and columns (no file_path)."""
+def datasets_list(user: AuthUser = Depends(require_user)):
+    """Datasets visible to the caller (own datasets)."""
     with Session(engine) as session:
-        rows = session.exec(select(Dataset)).all()
+        rows = session.exec(select(Dataset).where(Dataset.owner_email == user.email)).all()
         out = []
         for d in rows:
             item = {
@@ -113,11 +137,11 @@ def datasets_list():
                 "name": d.name,
                 "description": d.description,
                 "owner_email": d.owner_email,
-                "organization": getattr(d, "organization", "") or "",
-                "created_at": d.created_at.isoformat(),
+                "organization": d.organization or "",
+                "created_at": audit_timestamp(d.created_at),
             }
             try:
-                item["columns"] = json.loads(getattr(d, "columns", "[]") or "[]")
+                item["columns"] = json.loads(d.columns or "[]")
             except (json.JSONDecodeError, TypeError):
                 item["columns"] = []
             out.append(item)
@@ -125,28 +149,28 @@ def datasets_list():
 
 
 @router.get("/accessible/{requester_email}")
-def datasets_accessible(requester_email: str):
-    """All datasets for which this researcher has at least one completed job."""
+def datasets_accessible(requester_email: str, user: AuthUser = Depends(require_user)):
+    """Datasets for which this researcher has at least one completed job."""
+    assert_actor(user, requester_email)
     with Session(engine) as session:
-        stmt = select(Dataset).join(Job, Job.dataset_id == Dataset.id).where(
-            Job.requester_email == requester_email, Job.status == "completed"
+        stmt = (
+            select(Dataset)
+            .join(Job, Job.dataset_id == Dataset.id)
+            .where(Job.requester_email == user.email, Job.status == "completed")
+            .distinct()
         )
-        seen = set()
         result = []
         for d in session.exec(stmt).all():
-            if d.id in seen:
-                continue
-            seen.add(d.id)
             item = {
                 "id": d.id,
                 "name": d.name,
                 "description": d.description,
                 "owner_email": d.owner_email,
-                "organization": getattr(d, "organization", "") or "",
-                "created_at": d.created_at.isoformat(),
+                "organization": d.organization or "",
+                "created_at": audit_timestamp(d.created_at),
             }
             try:
-                item["columns"] = json.loads(getattr(d, "columns", "[]") or "[]")
+                item["columns"] = json.loads(d.columns or "[]")
             except (json.JSONDecodeError, TypeError):
                 item["columns"] = []
             result.append(item)

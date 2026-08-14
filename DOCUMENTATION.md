@@ -1,6 +1,6 @@
 # SecureCollab
 
-**Projektdokumentation – Stand: Hobby/Proof of Concept (keine Rechtsberatung)**  
+**Projektdokumentation – Stand: Hobby/Proof of Concept (keine Rechtsberatung)**
 Diese Datei beschreibt technische und produktbezogene Aspekte. Sie ersetzt keine individuelle rechtliche oder regulatorische Bewertung; siehe auch `LEGAL_NOTES.md` und `docs/DECISION_MAKER.md`.
 
 ---
@@ -56,23 +56,19 @@ Wir verwenden das **CKKS-Schema** (Cheon–Kim–Kim–Song), eine Variante von 
 
 CKKS ist **approximativ**: Rechenergebnisse unterliegen einem kleinen Rundungsfehler. Für Aggregationen über viele Werte (z. B. Mittelwert über Hunderte von Patienten) ist dieser Fehler in der Praxis vernachlässigbar und für die Entscheidungsfindung irrelevant. Wir nutzen TenSEAL als Python-Bindung zu Microsoft SEAL, der CKKS implementiert.
 
-### Threshold Key Generation
+### Study public key (not DKG)
 
-Der Schlüssel zum Entschlüsseln existiert nie vollständig an einem Ort. Stattdessen erzeugen die Teilnehmer gemeinsam einen **kombinierten Public Key**; jeder hält lokal einen **Key Share** (einen Teil des privaten Schlüssels).
+In this prototype the study encryption key is the **creator's public CKKS context**. Other participants' "key shares" are recorded for workflow/threshold *authorization*, not combined via distributed key generation.
 
 ```
-Institution A  →  Key Share A  ─┐
-Institution B  →  Key Share B  ─┼→  Combined Public Key (zum Verschlüsseln)
-Institution C  →  Key Share C  ─┘
+Creator        →  public CKKS context  →  Study public key (encrypt)
+Participants   →  local secret keys    →  used only to finalize results locally
 
-Entschlüsseln: braucht t von n Key Shares
+Result release: t of n institutions must *authorize*; the blob stays encrypted.
 ```
 
-- **Kein einzelner Teilnehmer** kann alleine entschlüsseln.
-- **Die Plattform** hat keinen einzigen Key Share – sie speichert nur den kombinierten Public Key.
-- Nach dem gewählten kryptographischen Modell und bei korrekter Implementierung ist es für die Plattform nach heutigem Stand der Technik praktisch nicht möglich, Rohdaten zu sehen.
-
-Im aktuellen Stand ist die Threshold-Key-Generierung vereinfacht (der erste eingereichte Key Share wird als kombinierter Public Key verwendet). Eine vollständige t-of-n DKG-Implementierung ist für Phase 2 geplant.
+- The **server never decrypts** and never receives `secret_context`.
+- A full t-of-n DKG is **not implemented**. Do not describe this PoC as threshold decryption.
 
 ### Cryptographic Commitments
 
@@ -123,27 +119,27 @@ Wir haben keine vergleichbare Reputation. Deshalb haben wir ein anderes Vertraue
 
 ### Unsere vier Verifikationsebenen
 
-**Ebene 1: Vollständig Open Source**  
+**Ebene 1: Vollständig Open Source**
 Nicht nur die Kryptographie-Bibliothek (wie bei Duality), sondern der gesamte Plattform-Code ist öffentlich. Jede Zeile die auf deinen Daten operiert ist lesbar, auditierbar, und verifizierbar.
 
 - GitHub: [URL]
 - Lizenz: Apache 2.0
 
-**Ebene 2: Codebase Hash in jedem Audit-Eintrag**  
+**Ebene 2: Codebase Hash in jedem Audit-Eintrag**
 Jede Operation auf deinen Daten wird mit dem SHA3-256 Hash der aktiven Codebase gestempelt. Du kannst nach einer Studie verifizieren: *„Diese Berechnung lief auf Commit [hash] – ich habe diesen Code gelesen.“*
 
 - `GET /system/integrity` gibt dir den aktuellen Hash.
 - VERIFY.md erklärt, wie du lokal denselben Hash berechnen kannst.
 
-**Ebene 3: Blockchain-verankerte Unveränderlichkeit (Phase 2)**  
+**Ebene 3: Blockchain-verankerte Unveränderlichkeit (Phase 2)**
 Täglich wird der Audit Trail Hash auf der Polygon Blockchain verankert. Danach können wir die History nicht mehr ändern – selbst wenn wir wollten. Polygon Transaction ID wird öffentlich veröffentlicht.
 
-**Ebene 4: Reproducible Builds**  
+**Ebene 4: Reproducible Builds**
 Jeder kann aus unserem Quellcode exakt dieselben Docker Images bauen und den Hash mit unserem produktiven Server vergleichen. Anleitung: VERIFY.md.
 
 ### Was das bedeutet
 
-Du musst dich nicht allein auf Vertrauen verlassen – du kannst zentrale Eigenschaften technisch prüfen.*  
+Du musst dich nicht allein auf Vertrauen verlassen – du kannst zentrale Eigenschaften technisch prüfen.*
 Das ist der fundamentale Unterschied zu proprietären Lösungen.
 
 ### Was wir ehrlich nicht bieten (noch nicht)
@@ -188,10 +184,10 @@ Diese Dokumente beschreiben beabsichtigte Sicherheitseigenschaften, nicht aber d
 
 Wir konkurrieren nicht mit Duality im Enterprise-Segment. Unser Zielmarkt:
 
-- Universitätskliniken und akademische Forschungsinstitute  
-- Mittelgroße Biotech-Unternehmen (&lt;500 Mitarbeiter)  
-- Nationale und regionale Biobanken  
-- Forschungskooperationen ohne Enterprise-IT-Budget  
+- Universitätskliniken und akademische Forschungsinstitute
+- Mittelgroße Biotech-Unternehmen (&lt;500 Mitarbeiter)
+- Nationale und regionale Biobanken
+- Forschungskooperationen ohne Enterprise-IT-Budget
 
 Diese Institutionen haben denselben regulatorischen Druck wie große Pharmaunternehmen, wurden von Enterprise-Anbietern aber praktisch nie bedient.
 
@@ -211,19 +207,19 @@ Diese Institutionen haben denselben regulatorischen Druck wie große Pharmaunter
 
 **Ziel:** Vollständiges kryptographisches Konzept demonstrieren. Kein Produktionsdruck, kein Kundendruck. Lernen und Fundament legen.
 
-- ✓ HE-Kern mit TenSEAL (CKKS) – Berechnungen auf verschlüsselten Daten  
-- ✓ FastAPI-Backend mit Study-Management  
-- ✓ Threshold Key Generation (vereinfacht)  
-- ✓ Cryptographic Commitments bei jedem Upload  
-- ✓ Hash-verketteter Audit Trail  
-- ✓ Client-SDK mit lokaler Verifikation  
-- ✓ Web-UI für Provider und Researcher  
-- ✓ Multi-Party-Workflow (mehrere Institutionen, eine Study)  
+- ✓ HE-Kern mit TenSEAL (CKKS) – Server entschlüsselt nicht
+- ✓ FastAPI-Backend mit Study-Management
+- ✓ Study-Public-Key = Creator-Key (kein DKG)
+- ✓ Cryptographic Commitments bei jedem Upload
+- ✓ Hash-verketteter Audit Trail
+- ✓ Client-SDK mit lokaler Verifikation
+- ✓ Web-UI für Provider und Researcher
+- ✓ Multi-Party-Workflow (mehrere Institutionen, eine Study)
 
-**Verfügbare Algorithmen:**  
-Descriptive Statistics (Mean, Std Dev, Min, Max), Correlation Analysis, Group Comparison (t-Test-Näherung), Linear Regression, Distribution Overview.
+**Verfügbare Algorithmen:**
+Descriptive Statistics, Correlation, Group Comparison, Linear Regression. `distribution` is unavailable (CKKS cannot bin by value).
 
-**Hosting:** Einzelner Server (z. B. Hetzner), ca. 50 €/Monat.  
+**Hosting:** Einzelner Server (z. B. Hetzner), ca. 50 €/Monat.
 **Status:** Funktionierend, demonstrierbar, nicht produktionsreif.
 
 ### Phase 2 – Erste institutionelle Kunden (bei konkretem Interesse)
@@ -242,11 +238,11 @@ Descriptive Statistics (Mean, Std Dev, Min, Max), Correlation Analysis, Group Co
 
 ### Phase 3 – Skalierung (bei validiertem Geschäftsmodell)
 
-- Genomik-Use-Case: SNP-Datenbanksuche, Allelfrequenz-Abfragen  
-- Multi-Party-Compute über föderierte Nodes (Daten verlassen die Institution nie)  
-- Marketplace: Institutionen bieten Datenzugang an, andere kaufen Analysen  
-- White-Label-Option für große Pharmakonzerne  
-- Dedicated Deployment für Institutionen mit höchsten Compliance-Anforderungen  
+- Genomik-Use-Case: SNP-Datenbanksuche, Allelfrequenz-Abfragen
+- Multi-Party-Compute über föderierte Nodes (Daten verlassen die Institution nie)
+- Marketplace: Institutionen bieten Datenzugang an, andere kaufen Analysen
+- White-Label-Option für große Pharmakonzerne
+- Dedicated Deployment für Institutionen mit höchsten Compliance-Anforderungen
 
 ---
 
@@ -266,10 +262,10 @@ Auch als Hobby-Projekt wurde die Architektur so gebaut, dass der Schritt zu eine
 
 **Was für Produktion wirklich neu gebaut oder ergänzt werden muss:**
 
-- Vollständige Threshold Decryption (geschätzt 2–3 Wochen)  
-- Blockchain-Anchoring (geschätzt 1 Woche)  
-- Compliance-Dokumentation (extern)  
-- Security Audit (extern)  
+- Vollständige Threshold Decryption (geschätzt 2–3 Wochen)
+- Blockchain-Anchoring (geschätzt 1 Woche)
+- Compliance-Dokumentation (extern)
+- Security Audit (extern)
 
 **Geschätzte Zeit von erstem Kundeninteresse zu produktionsreif:** 8–12 Wochen mit einem zusätzlichen Backend-Entwickler.
 
@@ -279,19 +275,19 @@ Auch als Hobby-Projekt wurde die Architektur so gebaut, dass der Schritt zu eine
 
 ### Warum diese Technologie-Entscheidungen
 
-**TenSEAL (CKKS)**  
+**TenSEAL (CKKS)**
 TenSEAL ist eine Python-Bindung zu Microsoft SEAL und implementiert CKKS. Es ist gut dokumentiert, aktiv gepflegt und für Gleitkommazahlen und statistische Operationen geeignet. Alternativen (z. B. HElib, OpenFHE) sind leistungsstark, aber der Einstieg und die Integration in Python sind aufwändiger. Für Produktion bleibt CKKS die passende Wahl; TenSEAL kann bei Bedarf durch eine andere SEAL-Bindung ersetzt werden, ohne das Konzept zu ändern.
 
-**FastAPI**  
+**FastAPI**
 Schnell, typisiert, mit automatischer OpenAPI-Dokumentation. Wird in Produktion von vielen Unternehmen eingesetzt. Die Alternative wäre Flask oder Django – FastAPI bietet bessere Performance und eine klarere API-Struktur für ein reines REST-Backend ohne Monolithen-Overhead.
 
-**SQLModel / SQLite**  
+**SQLModel / SQLite**
 SQLModel kombiniert SQLAlchemy und Pydantic; das Schema ist in Python definiert und migrationsfreundlich. SQLite ist für Phase 1 ausreichend und erlaubt lokale Entwicklung ohne Setup. Der Wechsel zu PostgreSQL erfordert nur eine andere Connection URL und ggf. kleine Syntax-Anpassungen – das Schema bleibt.
 
-**Next.js / Tailwind**  
+**Next.js / Tailwind**
 Next.js (App Router) und Tailwind ermöglichen eine moderne, wartbare UI ohne schweres Framework. Die Alternative wäre ein reines React-Setup oder ein anderes Meta-Framework; Next.js ist weit verbreitet und eignet sich für spätere Skalierung (SSR, API Routes bei Bedarf).
 
-**Docker / Hetzner**  
+**Docker / Hetzner**
 Docker ermöglicht reproduzierbare Umgebungen; ein einzelner VPS bei Hetzner hält die Kosten in Phase 1 niedrig. Der Wechsel zu Azure oder AWS mit Kubernetes ist eine Infrastruktur-Entscheidung, keine Anwendungs-Architektur-Änderung.
 
 ---
@@ -300,9 +296,9 @@ Docker ermöglicht reproduzierbare Umgebungen; ein einzelner VPS bei Hetzner hä
 
 ### Voraussetzungen
 
-- **Python 3.11** (TenSEAL hat keine Wheels für neuere Python-Versionen)  
-- **Node.js 18+** (für Next.js)  
-- Optional: **Docker** für konsistente Umgebung  
+- **Python 3.11** (TenSEAL hat keine Wheels für neuere Python-Versionen)
+- **Node.js 18+** (für Next.js)
+- Optional: **Docker** für konsistente Umgebung
 
 ### Installation (unter 10 Minuten)
 
@@ -331,7 +327,7 @@ cd ..
 ```bash
 cd backend
 source .venv/bin/activate
-uvicorn main:app --reload --host 0.0.0.0 --port 8000
+uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
 **4. Frontend starten** (in einem zweiten Terminal)
@@ -341,13 +337,13 @@ cd frontend
 npm run dev
 ```
 
-- Backend: http://localhost:8000  
-- Frontend: http://localhost:3000  
-- API-Dokumentation: http://localhost:8000/docs  
+- Backend: http://localhost:8000
+- Frontend: http://localhost:3000
+- API-Dokumentation: http://localhost:8000/docs
 
 ### Demo-Workflow: Von CSV zu verschlüsseltem Ergebnis (5 Schritte)
 
-**Schritt 1 – CSV vorbereiten**  
+**Schritt 1 – CSV vorbereiten**
 Eine CSV mit numerischen Spalten (z. B. `backend/sample_clinical_data.csv`).
 
 **Schritt 2 – Lokal verschlüsseln**
@@ -366,7 +362,7 @@ Die Ausgabe zeigt die erkannten Spalten und eine JSON-Liste für das `columns`-F
 .venv/bin/python decrypt.py result.json
 ```
 
-**Algorithmen E2E-Test (optional)**  
+**Algorithmen E2E-Test (optional)**
 Mit installiertem TenSEAL (z. B. in der .venv) kannst du alle Algorithmen einmal mit den Beispieldaten durchlaufen lassen und die Fehlermeldungen bei ungültigen Spalten prüfen:
 
 ```bash
@@ -375,27 +371,27 @@ Mit installiertem TenSEAL (z. B. in der .venv) kannst du alle Algorithmen einmal
 
 Ohne TenSEAL gibt das Skript nur eine kurze Anleitung aus. Es testet u. a. `descriptive_statistics`, `correlation`, `prevalence_and_risk`, `survival_analysis_approx` und die Validierung (klare Fehlermeldung bei fehlender Spalte).
 
-**Schritt 4 – Study anlegen (über Web-UI)**  
+**Schritt 4 – Study anlegen (über Web-UI)**
 Unter http://localhost:3000/studies/new eine Study erstellen (Name, Threshold, erlaubte Algorithmen). Nach dem Erstellen erscheint die Study-ID.
 
 **Schritt 5 – Multi-Party mit SDK**
 
-- Key Share erzeugen:  
-  `python sdk.py generate-key --email institution@hospital.com`  
-- Study verifizieren:  
-  `python sdk.py verify-study --study-id <ID> --url http://localhost:8000`  
-- Nach Aktivierung der Study (genug Teilnehmer): Upload mit SDK  
-  `python sdk.py upload --csv data.csv --study-id <ID> --email institution@hospital.com --url http://localhost:8000`  
+- Key Share erzeugen:
+  `python sdk.py generate-key --email institution@hospital.com`
+- Study verifizieren:
+  `python sdk.py verify-study --study-id <ID> --url http://localhost:8000`
+- Nach Aktivierung der Study (genug Teilnehmer): Upload mit SDK
+  `python sdk.py upload --csv data.csv --study-id <ID> --email institution@hospital.com --url http://localhost:8000`
 
 Weitere Befehle: `decrypt-share`, `verify-audit`, `generate-report` (siehe `python sdk.py --help`).
 
 ### Multi-Party Study mit zwei Test-Institutionen simulieren
 
-1. **Study erstellen** (Web-UI oder `POST /studies/create`): z. B. `threshold_n=2`, `threshold_t=2`, zwei erlaubte Algorithmen.  
-2. **Institution A:** SDK `generate-key --email a@test.com`, Public Key Share manuell oder per Script an `POST /studies/{id}/join` senden (oder zweiten Teilnehmer simulieren).  
-3. **Institution B:** Gleiches mit `b@test.com`, `join` mit eigenem Key Share.  
-4. Sobald `threshold_n` Teilnehmer gejoint haben, wird die Study automatisch **active**.  
-5. Beide können nun über die Web-UI oder das SDK Datasets hochladen, Analysen anfragen und Approvals/Decryption Shares abgeben.  
+1. **Study erstellen** (Web-UI oder `POST /studies/create`): z. B. `threshold_n=2`, `threshold_t=2`, zwei erlaubte Algorithmen.
+2. **Institution A:** SDK `generate-key --email a@test.com`, Public Key Share manuell oder per Script an `POST /studies/{id}/join` senden (oder zweiten Teilnehmer simulieren).
+3. **Institution B:** Gleiches mit `b@test.com`, `join` mit eigenem Key Share.
+4. Sobald `threshold_n` Teilnehmer gejoint haben, wird die Study automatisch **active**.
+5. Beide können nun über die Web-UI oder das SDK Datasets hochladen, Analysen anfragen und Approvals/Decryption Shares abgeben.
 
 Die Web-UI unter `/studies/<id>` zeigt alle Tabs (Overview, Participants, Datasets, Analysis, Audit Trail, Protocol Report) und den kryptographischen Status.
 

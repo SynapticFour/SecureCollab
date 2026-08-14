@@ -1,5 +1,15 @@
 // SPDX-License-Identifier: Apache-2.0
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+const EMAIL_STORAGE_KEY = "securecollab_user_email";
+
+function authHeaders(extra?: Record<string, string>): HeadersInit {
+  const headers: Record<string, string> = { ...(extra || {}) };
+  if (typeof window !== "undefined") {
+    const email = window.localStorage.getItem(EMAIL_STORAGE_KEY)?.trim();
+    if (email) headers["X-User-Email"] = email;
+  }
+  return headers;
+}
 
 type ErrorPayload = {
   detail?: string;
@@ -65,8 +75,9 @@ export type JobResult = {
   computation_type: string;
   status: string;
   created_at: string;
-  result?: number;
-  result_json?: Record<string, unknown>;
+  result?: number | null;
+  result_json?: Record<string, unknown> | null;
+  encrypted?: boolean;
 };
 
 // --- Study types & API ---
@@ -126,14 +137,16 @@ export type StudyPublicKey = {
 };
 
 export async function getStudies(participantEmail: string): Promise<StudyListItem[]> {
-  const res = await fetch(`${API_BASE}/studies?participant_email=${encodeURIComponent(participantEmail)}`);
+  const res = await fetch(`${API_BASE}/studies?participant_email=${encodeURIComponent(participantEmail)}`, {
+    headers: authHeaders(),
+  });
   if (!res.ok) return [];
   const data = await res.json();
   return Array.isArray(data) ? data : [];
 }
 
 export async function getStudy(studyId: number): Promise<StudyDetail> {
-  const res = await fetch(`${API_BASE}/studies/${studyId}`);
+  const res = await fetch(`${API_BASE}/studies/${studyId}`, { headers: authHeaders() });
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
     throw new Error(buildErrorMessage(err, "Study not found"));
@@ -154,7 +167,7 @@ export async function createStudy(body: {
 }): Promise<{ study_id: number }> {
   const res = await fetch(`${API_BASE}/studies/create`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: authHeaders({ "Content-Type": "application/json" }),
     body: JSON.stringify(body),
   });
   if (!res.ok) {
@@ -170,7 +183,7 @@ export async function joinStudy(
 ): Promise<{ study_id: number; status: string }> {
   const res = await fetch(`${API_BASE}/studies/${studyId}/join`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: authHeaders({ "Content-Type": "application/json" }),
     body: JSON.stringify(body),
   });
   if (!res.ok) {
@@ -181,7 +194,7 @@ export async function joinStudy(
 }
 
 export async function getStudyPublicKey(studyId: number): Promise<StudyPublicKey> {
-  const res = await fetch(`${API_BASE}/studies/${studyId}/public_key`);
+  const res = await fetch(`${API_BASE}/studies/${studyId}/public_key`, { headers: authHeaders() });
   if (!res.ok) throw new Error("Failed to fetch public key");
   return res.json();
 }
@@ -200,7 +213,11 @@ export async function uploadStudyDataset(
   form.append("dataset_name", datasetName);
   form.append("columns", JSON.stringify(columns));
   if (commitmentTimestamp) form.append("commitment_timestamp", commitmentTimestamp);
-  const res = await fetch(`${API_BASE}/studies/${studyId}/upload_dataset`, { method: "POST", body: form });
+  const res = await fetch(`${API_BASE}/studies/${studyId}/upload_dataset`, {
+    method: "POST",
+    headers: authHeaders(),
+    body: form,
+  });
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
     throw new Error(buildErrorMessage(err, "Upload failed"));
@@ -214,7 +231,7 @@ export async function requestStudyComputation(
 ): Promise<{ job_id: number }> {
   const res = await fetch(`${API_BASE}/studies/${studyId}/request_computation`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: authHeaders({ "Content-Type": "application/json" }),
     body: JSON.stringify(body),
   });
   if (!res.ok) {
@@ -231,7 +248,7 @@ export async function approveStudyJob(
 ): Promise<{ job_id: number; status: string; approvals?: number; required?: number }> {
   const res = await fetch(`${API_BASE}/studies/${studyId}/jobs/${jobId}/approve`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: authHeaders({ "Content-Type": "application/json" }),
     body: JSON.stringify({ institution_email: institutionEmail }),
   });
   if (!res.ok) {
@@ -249,7 +266,7 @@ export async function submitDecryptionShare(
 ): Promise<{ job_id: number; status: string; result_json?: unknown }> {
   const res = await fetch(`${API_BASE}/studies/${studyId}/jobs/${jobId}/submit_decryption_share`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: authHeaders({ "Content-Type": "application/json" }),
     body: JSON.stringify({ institution_email: institutionEmail, decryption_share: decryptionShare }),
   });
   if (!res.ok) {
@@ -260,14 +277,14 @@ export async function submitDecryptionShare(
 }
 
 export async function getStudyAuditTrail(studyId: number): Promise<AuditEntry[]> {
-  const res = await fetch(`${API_BASE}/studies/${studyId}/audit_trail`);
+  const res = await fetch(`${API_BASE}/studies/${studyId}/audit_trail`, { headers: authHeaders() });
   if (!res.ok) return [];
   const data = await res.json();
   return Array.isArray(data) ? data : [];
 }
 
 export async function getStudyProtocol(studyId: number): Promise<StudyProtocol> {
-  const res = await fetch(`${API_BASE}/studies/${studyId}/protocol`);
+  const res = await fetch(`${API_BASE}/studies/${studyId}/protocol`, { headers: authHeaders() });
   if (!res.ok) throw new Error("Failed to fetch protocol");
   return res.json();
 }
@@ -283,7 +300,11 @@ export async function uploadDataset(
   form.append("name", name);
   form.append("description", description);
   form.append("owner_email", owner_email);
-  const res = await fetch(`${API_BASE}/datasets/upload`, { method: "POST", body: form });
+  const res = await fetch(`${API_BASE}/datasets/upload`, {
+    method: "POST",
+    headers: authHeaders(),
+    body: form,
+  });
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
     throw new Error(buildErrorMessage(err, "Upload failed"));
@@ -292,24 +313,31 @@ export async function uploadDataset(
 }
 
 export async function getDatasets(): Promise<Dataset[]> {
-  const res = await fetch(`${API_BASE}/datasets`);
+  const res = await fetch(`${API_BASE}/datasets`, { headers: authHeaders() });
   if (!res.ok) throw new Error("Failed to fetch datasets");
   const data = await res.json();
   return Array.isArray(data) ? data : [];
 }
 
 export async function getPendingJobs(ownerEmail: string): Promise<PendingJob[]> {
-  const res = await fetch(
-    `${API_BASE}/jobs/pending/${encodeURIComponent(ownerEmail)}`
-  );
+  const res = await fetch(`${API_BASE}/jobs/pending/${encodeURIComponent(ownerEmail)}`, {
+    headers: authHeaders(),
+  });
   if (!res.ok) return [];
   const data = await res.json();
   return Array.isArray(data) ? data : [];
 }
 
-export async function approveJob(jobId: number): Promise<{ result: number }> {
+export async function approveJob(jobId: number): Promise<{
+  job_id: number;
+  status: string;
+  result: null;
+  result_json?: Record<string, unknown>;
+  encrypted?: boolean;
+}> {
   const res = await fetch(`${API_BASE}/jobs/${jobId}/approve`, {
     method: "POST",
+    headers: authHeaders(),
   });
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
@@ -321,6 +349,7 @@ export async function approveJob(jobId: number): Promise<{ result: number }> {
 export async function rejectJob(jobId: number): Promise<void> {
   const res = await fetch(`${API_BASE}/jobs/${jobId}/reject`, {
     method: "POST",
+    headers: authHeaders(),
   });
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
@@ -336,7 +365,7 @@ export async function requestJob(
 ): Promise<{ job_id: number }> {
   const res = await fetch(`${API_BASE}/jobs/request`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: authHeaders({ "Content-Type": "application/json" }),
     body: JSON.stringify({
       dataset_id,
       requester_email,
@@ -353,7 +382,7 @@ export async function requestJob(
 }
 
 export async function getJobResult(jobId: number): Promise<JobResult> {
-  const res = await fetch(`${API_BASE}/jobs/${jobId}/result`);
+  const res = await fetch(`${API_BASE}/jobs/${jobId}/result`, { headers: authHeaders() });
   if (!res.ok) throw new Error("Failed to fetch job");
   return res.json();
 }

@@ -3,18 +3,18 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime
 
-from sqlmodel import select
+from sqlmodel import Session, select
 
 from app.config import INITIAL_HASH
 from app.core.security import sha3_256_hex
+from app.core.timeutils import audit_timestamp, utc_now
 from app.models import AuditLog
 from app.services.integrity_service import get_deployment_integrity
 
 
 def write_audit_log(
-    session,
+    session: Session,
     study_id: int | None,
     action_type: str,
     actor_email: str,
@@ -31,8 +31,8 @@ def write_audit_log(
         else None
     )
     previous_hash = last.entry_hash if last else INITIAL_HASH
-    now = datetime.utcnow()
-    ts_str = now.isoformat()
+    now = utc_now()
+    ts_str = audit_timestamp(now)
     details_json = json.dumps(details_with_integrity, sort_keys=True)
     payload = f"{action_type}{actor_email}{details_json}{ts_str}{previous_hash}"
     entry_hash = sha3_256_hex(payload)

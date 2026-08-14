@@ -32,6 +32,16 @@ jobs:
       - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
-      - run: pip install "ruff==0.15.22" mypy
-      - run: cd backend && ruff check app/
-      - run: cd backend && mypy app/ || true
+      - run: pip install "ruff==0.15.22"
+      - run: cd backend && ruff check app/ algorithms.py integrity.py
+
+  test-sdk:
+    if: github.actor != 'dependabot[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - run: pip install pytest cryptography click
+      - run: cd sdk && PYTHONPATH=. pytest tests/ -v --tb=short

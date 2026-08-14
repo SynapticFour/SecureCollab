@@ -37,7 +37,6 @@ def run_validation_tests_only() -> bool:
     # Minimal bundle: only structure, no real ciphertexts (we only test validation paths).
     mock_bundle = {
         "public_context": b"",
-        "secret_context": b"",
         "n": 10,
         "vectors": {"col_a": b"x", "col_b": b"y"},
         "columns": '["col_a","col_b"]',
@@ -118,11 +117,9 @@ def main() -> int:
 
     from algorithms import (
         ALGORITHMS,
-        run_descriptive_statistics,
-        run_pearson_correlation_matrix,
+        finalize_encrypted_result,
         run_prevalence_and_risk,
         run_survival_analysis_approx,
-        run_multi_group_comparison,
     )
     from decrypt import format_result
 
@@ -170,7 +167,6 @@ def main() -> int:
     }
 
     bundle = {
-        "secret_context": secret_ctx,
         "public_context": public_ctx,
         "vectors": vectors_serialized,
         "columns": json.dumps(numeric_columns),
@@ -202,6 +198,8 @@ def main() -> int:
         print(f"--- {algo_id} ({label}) ---")
         try:
             result = ALGORITHMS[algo_id](bundle, cols)
+            if result.get("encrypted"):
+                result = finalize_encrypted_result(secret_ctx, result)
             print(format_result(result))
         except Exception as e:
             print(f"  ERROR: {e}")

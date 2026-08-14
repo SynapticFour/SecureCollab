@@ -240,7 +240,7 @@ export default function StudyDashboardPage() {
                 </div>
               )}
               <p className="mt-4 text-sm text-slate-600">
-                All data in this study is encrypted with this key. Decryption requires {study.threshold_t} of {study.threshold_n} participants.
+                All data in this study is encrypted with the creator's public key. The server never decrypts. Releasing a result requires {study.threshold_t} of {study.threshold_n} authorizations.
               </p>
             </div>
           </div>
@@ -428,9 +428,9 @@ export default function StudyDashboardPage() {
               ))}
               {awaitingDecryptionJobs.map((j) => (
                 <div key={j.id} className="mt-4 rounded-lg border border-amber-200 bg-amber-50/50 p-3">
-                  <p className="text-sm font-medium">Job #{j.id} – Result encrypted. Submit decryption share to reveal.</p>
+                  <p className="text-sm font-medium">Job #{j.id} – Encrypted result ready. Authorize release (not a partial decrypt).</p>
                   <p className="mt-2 text-xs text-slate-600">
-                    Use the SecureCollab SDK: <code>python sdk.py decrypt-share --study-id {studyId} --job-id {j.id} --email your@email.com --url ...</code>
+                    Use the SecureCollab SDK: <code>securecollab decrypt-share --study-id {studyId} --job-id {j.id} --email your@email.com --url ...</code>
                   </p>
                   <button
                     type="button"

@@ -4,20 +4,20 @@
 
 SecureCollab relies on the following cryptographic building blocks:
 
-- **Homomorphic Encryption (CKKS):** Computations run on ciphertext; the platform is designed so that it does not need plaintext patient data. In the intended protocol, only the combination of threshold key shares can decrypt results.
-- **Threshold Key Generation:** The full secret key is intended never to exist in one place. Decryption is designed to require at least `t` of `n` participants' key shares.
-- **Cryptographic Commitments:** Every dataset upload is bound to a commitment hash `SHA3-256(ciphertext || public_key_fingerprint || timestamp || institution_id)`. This provides cryptographic evidence about which key was used and reduces the risk of unnoticed data swaps after upload.
-- **Audit Trail:** All operations are logged in an append-only, hash-chained audit trail. Each entry includes `entry_hash = SHA3-256(action_type || actor || details || timestamp || previous_hash)`. Under the stated assumptions, tampering should be technically detectable.
-- **Codebase Integrity:** A deterministic hash of the deployed codebase is computed at startup and included in every audit log entry. Institutions can compare this with a locally computed hash to assess whether the running instance matches a reviewed code version via `GET /system/integrity`.
-
-- **Deserialization (pickle):** Uploaded `.bin` files are deserialized with `pickle`. Only trusted institutions upload; consider validating bundle structure before use (see `docs/OWASP_ANALYSIS.md`).
+- **Homomorphic Encryption (CKKS):** Computations run on ciphertext. The server never decrypts; it returns encrypted sufficient statistics. Institutions finalize locally with a secret context that is never uploaded.
+- **Study public key:** In this prototype the encryption key is the **creator's public CKKS context** (`key_source: creator_public_key`). This is not threshold DKG.
+- **Result release:** After `t` institutions authorize, the server returns the **still-encrypted** result blob. Shares are authorizations, not partial decrypts.
+- **Cryptographic Commitments:** Every dataset upload is bound to a commitment hash `SHA3-256(ciphertext || public_key_fingerprint || timestamp || institution_id)`.
+- **Audit Trail:** All operations are logged in an append-only, hash-chained audit trail. Each entry includes `entry_hash = SHA3-256(action_type || actor || details || timestamp || previous_hash)`.
+- **Codebase Integrity:** A deterministic hash of the deployed codebase is computed at startup and cached; `GET /system/integrity` returns that cached value.
+- **Bundle format:** Uploaded `.bin` files are JSON + base64 TenSEAL bytes. Pickle and `secret_context` are rejected.
 
 ## Known Limitations (non-exhaustive)
 
 - **Side-channel attacks:** TenSEAL/SEAL are not formally hardened against all side-channel attacks. For highest assurance, consider future migration to TFHE-rs or formally verified runtimes (upstream and roadmap).
 - **CKKS approximation errors:** Results are approximate (floating point). Documented per algorithm; not a security issue but relevant for interpretation.
 - **No formal verification:** The application code has not undergone formal verification. Security relies on design, review, and standard library use.
-- **Secret key storage (SDK):** Secret keys are protected by password-derived encryption (PBKDF2 + Fernet when `cryptography` is installed). The password never leaves the machine. Fallback uses a simpler scheme; prefer installing `cryptography` for production.
+- **Secret key storage (SDK):** Secret keys are Fernet-wrapped with PBKDF2 (600k iterations). Empty passwords and XOR fallbacks are refused. The password never leaves the machine.
 
 ## Reporting Vulnerabilities (security only)
 
@@ -64,7 +64,7 @@ Important:
 - It is not a substitute for institutional identity management (IdP, SSO, etc.).
 - For a production deployment, institutions should integrate with their own auth/SSO and enforce roles according to their policies.
 
-Currently, `/system/config-summary` is restricted to users with the `admin` role (as derived from the header and configuration). Additional endpoints can be wired to these role checks in future iterations as required by the operating institution.
+Currently, mutating API routes require `X-User-Email`. Body fields such as `requester_email` / `institution_email` must match that header. `/system/config-summary` is additionally restricted to the `admin` role. HSTS is enabled when `SECURECOLLAB_PRODUCTION` is set **or** `SECRET_KEY` is not the documented development default. Database and upload paths accept both `DATABASE_URL`/`UPLOAD_DIR` and `SECURECOLLAB_DATABASE_URL`/`SECURECOLLAB_UPLOADS_DIR`.
 
 ## Monitoring and logging (operator responsibility)
 

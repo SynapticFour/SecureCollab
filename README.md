@@ -18,9 +18,9 @@ For wording around security, privacy, and compliance, see [`LEGAL_NOTES.md`](LEG
 
 ## How it works
 
-Homomorphic Encryption (HE) allows computation on ciphertext. We use the CKKS scheme (via TenSEAL / Microsoft SEAL) because it supports approximate arithmetic on real numbers — means, regression, correlation — which is what clinical statistics need. The server never decrypts; it runs the same operations on encrypted vectors and returns an encrypted result.
+Homomorphic Encryption (HE) allows computation on ciphertext. We use the CKKS scheme (via TenSEAL / Microsoft SEAL) because it supports approximate arithmetic on real numbers — means, regression, correlation — which is what clinical statistics need. The server never decrypts; it runs the same operations on encrypted vectors and returns encrypted sufficient statistics. Institutions finalize plaintext locally with their secret key.
 
-Threshold key generation means the decryption key never exists in one place. Each institution holds a key share locally. The server only has the combined public key (used to encrypt). To decrypt a result, a threshold of institutions must contribute their shares. So no single party — including the platform — can decrypt.
+This prototype uses the **study creator's public key** to encrypt (not threshold DKG). Result "shares" are authorizations to *release* the encrypted blob, not cryptographic partial decrypts. A full t-of-n DKG is not implemented.
 
 Cryptographic commitments are computed at upload: `SHA3-256(ciphertext || public_key_fingerprint || timestamp || institution)`. They prove which key was used and that the stored file matches what was uploaded. Anyone can verify this locally.
 
@@ -107,7 +107,7 @@ cd SecureCollab
 cd backend
 python3.11 -m venv .venv && source .venv/bin/activate   # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
-uvicorn main:app --reload
+uvicorn app.main:app --reload
 ```
 
 In another terminal:

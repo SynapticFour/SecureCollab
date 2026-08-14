@@ -40,8 +40,14 @@ _logger = logging.getLogger("securecollab")
 
 def add_security_middleware(app: FastAPI) -> None:
     """Register exception handler, security headers, and CORS. No business logic."""
+    @app.exception_handler(HTTPException)
+    async def http_exception_handler(request: Request, exc: HTTPException):
+        return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail})
+
     @app.exception_handler(Exception)
     async def global_exception_handler(request: Request, exc: Exception):
+        if isinstance(exc, HTTPException):
+            return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail})
         error_id = str(uuid.uuid4())
         _logger.error("Unhandled exception %s: %s", error_id, exc, exc_info=True)
         return JSONResponse(
@@ -132,6 +138,27 @@ def get_current_user(request: Request) -> AuthUser:
     email = (request.headers.get("X-User-Email") or "").strip()
     role = _resolve_role(email) if email else "anonymous"
     return AuthUser(email=email, role=role)
+
+
+def require_user(request: Request) -> AuthUser:
+    """Require X-User-Email. Identity for mutating routes is this header, not body fields."""
+    email = (request.headers.get("X-User-Email") or "").strip()
+    if not email:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Missing X-User-Email header",
+        )
+    return AuthUser(email=email, role=_resolve_role(email))
+
+
+def assert_actor(user: AuthUser, claimed: str | None) -> str:
+    """If the client sent an actor email, it must match the authenticated header."""
+    if claimed and claimed.strip() and claimed.strip().lower() != user.email.lower():
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="X-User-Email does not match the requested actor",
+        )
+    return user.email
 
 
 def require_admin(request: Request) -> AuthUser:

@@ -4,6 +4,8 @@ from datetime import datetime
 
 from sqlmodel import Field, SQLModel
 
+from app.core.timeutils import utc_now
+
 
 class Job(SQLModel, table=True):
     __tablename__ = "jobs"
@@ -19,7 +21,7 @@ class Job(SQLModel, table=True):
     result: float | None = None
     result_json: str | None = None
     result_commitment: str | None = None
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=utc_now)
 
 
 class JobApproval(SQLModel, table=True):
@@ -27,7 +29,7 @@ class JobApproval(SQLModel, table=True):
     id: int | None = Field(default=None, primary_key=True)
     job_id: int = Field(foreign_key="jobs.id")
     institution_email: str = ""
-    approved_at: datetime = Field(default_factory=datetime.utcnow)
+    approved_at: datetime = Field(default_factory=utc_now)
 
 
 class JobDecryptionShare(SQLModel, table=True):
@@ -36,4 +38,4 @@ class JobDecryptionShare(SQLModel, table=True):
     job_id: int = Field(foreign_key="jobs.id")
     institution_email: str = ""
     decryption_share: str = ""
-    submitted_at: datetime = Field(default_factory=datetime.utcnow)
+    submitted_at: datetime = Field(default_factory=utc_now)

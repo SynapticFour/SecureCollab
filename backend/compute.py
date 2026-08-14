@@ -1,23 +1,25 @@
 # SPDX-License-Identifier: Apache-2.0
 #!/usr/bin/env python3
+"""Run an HE algorithm on encrypted.bin. Writes encrypted sufficient statistics.
+
+Pass a .secret file as the 5th argument to also write a plaintext finalized result.
 """
-Liest encrypted.bin, führt den gewählten Algorithmus auf den gewählten Spalten aus
-und schreibt result.json (entschlüsseltes result_json).
-Parameter: algorithm (str), selected_columns (JSON-Array).
-"""
+from __future__ import annotations
+
 import json
-import pickle
 import sys
 from pathlib import Path
 
-from algorithms import ALGORITHMS
+from algorithms import ALGORITHMS, finalize_encrypted_result
+from app.services.he_service import run_computation
 
 
-def main():
+def main() -> None:
+    algorithm = "mean"
+    selected_columns: list[str] = []
     in_path = Path("encrypted.bin")
     out_path = Path("result.json")
-    algorithm = "mean"
-    selected_columns = []
+    secret_path: Path | None = None
 
     args = sys.argv[1:]
     if args:
@@ -33,46 +35,32 @@ def main():
         in_path = Path(args[2])
     if len(args) >= 4:
         out_path = Path(args[3])
+    if len(args) >= 5:
+        secret_path = Path(args[4])
 
     if not in_path.exists():
         print(f"Fehler: {in_path} nicht gefunden.", file=sys.stderr)
         sys.exit(1)
-
-    with open(in_path, "rb") as f:
-        bundle = pickle.load(f)
-
     if algorithm not in ALGORITHMS:
         print(f"Unbekannter Algorithmus: {algorithm}. Erlaubt: {list(ALGORITHMS.keys())}", file=sys.stderr)
         sys.exit(1)
 
-    if "vectors" in bundle and not selected_columns:
-        try:
-            cols = json.loads(bundle.get("columns", "[]"))
-        except (json.JSONDecodeError, TypeError):
-            cols = list(bundle["vectors"].keys())
-        if algorithm in ("correlation", "linear_regression", "prevalence_and_risk", "survival_analysis_approx"):
-            selected_columns = cols[:2]
-        elif algorithm == "pearson_correlation_matrix":
-            selected_columns = cols[: min(6, len(cols))]
-        elif algorithm in ("logistic_regression_approx", "multi_group_comparison", "subgroup_analysis"):
-            selected_columns = cols[: min(6, len(cols))]
-        elif algorithm == "federated_mean_aggregation":
-            selected_columns = cols[:2] if len(cols) >= 2 else cols[:1]
-        else:
-            selected_columns = cols[:1]
-
     try:
-        result = ALGORITHMS[algorithm](bundle, selected_columns)
+        result = run_computation(in_path, algorithm, selected_columns)
     except Exception as e:
         print(f"Berechnung fehlgeschlagen: {e}", file=sys.stderr)
         sys.exit(1)
 
-    with open(out_path, "w", encoding="utf-8") as f:
-        json.dump(result, f, indent=2)
+    out_path.write_text(json.dumps(result, indent=2), encoding="utf-8")
+    print(f"Algorithmus '{algorithm}' ausgeführt -> {out_path} (encrypted sufficient statistics)")
+    print(json.dumps(result, indent=2)[:2000])
 
-    print(f"Algorithmus '{algorithm}' ausgeführt -> {out_path}")
-    print("result_json:")
-    print(json.dumps(result, indent=2))
+    if secret_path and secret_path.exists():
+        plain = finalize_encrypted_result(secret_path.read_bytes(), result)
+        plain_path = out_path.with_name(out_path.stem + "_plain.json")
+        plain_path.write_text(json.dumps(plain, indent=2), encoding="utf-8")
+        print(f"Lokal entschlüsselt -> {plain_path}")
+        print(json.dumps(plain, indent=2))
 
 
 if __name__ == "__main__":

@@ -37,7 +37,7 @@ export default function PendingRequestsPage() {
   const [rejectingId, setRejectingId] = useState<number | null>(null);
   const [approvedResult, setApprovedResult] = useState<{
     jobId: number;
-    result: number;
+    encrypted: boolean;
   } | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -69,7 +69,7 @@ export default function PendingRequestsPage() {
     setApprovedResult(null);
     try {
       const res = await approveJob(job.id);
-      setApprovedResult({ jobId: job.id, result: res.result });
+      setApprovedResult({ jobId: job.id, encrypted: res.encrypted === true });
       await load();
       setError(null);
     } finally {
@@ -129,10 +129,10 @@ export default function PendingRequestsPage() {
                 </p>
                 {showResult && (
                   <div className="mt-3 rounded-lg bg-success/10 p-3 text-sm text-success">
-                    <strong>Result: {Number(approvedResult!.result).toFixed(2)}</strong>
+                    <strong>Computation completed (encrypted).</strong>
                     <br />
                     <span className="text-xs">
-                      Computed on encrypted data – source never decrypted.
+                      The server never decrypted. Finalize locally with the SDK (`securecollab` / decrypt.py).
                     </span>
                   </div>
                 )}

@@ -5,6 +5,7 @@ from __future__ import annotations
 from contextlib import contextmanager
 
 from sqlalchemy import text
+from sqlalchemy.exc import OperationalError, ProgrammingError
 from sqlmodel import Session, create_engine
 
 from app.config import SQLITE_URL
@@ -45,8 +46,14 @@ def session_scope():
             raise
 
 
+_ALREADY_EXISTS = ("duplicate column", "already exists", "duplicate column name")
+
+
 def create_db_and_tables():
-    """Create all tables and optionally add missing columns (migration helper)."""
+    """Create all tables. Additive ALTER is only for missing columns; other errors propagate.
+
+    Prefer Alembic for production schema changes (see backend/migrations/README.md).
+    """
     from sqlmodel import SQLModel
 
     SQLModel.metadata.create_all(engine)
@@ -64,5 +71,9 @@ def create_db_and_tables():
             try:
                 conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {col} {typ} DEFAULT {default}"))
                 conn.commit()
-            except Exception:
-                pass
+            except (OperationalError, ProgrammingError) as e:
+                msg = str(e).lower()
+                if any(s in msg for s in _ALREADY_EXISTS):
+                    conn.rollback()
+                    continue
+                raise
