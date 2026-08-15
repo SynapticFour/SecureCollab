@@ -5,6 +5,8 @@ import io
 import pytest
 from fastapi.testclient import TestClient
 
+from app.core.release import expected_release_share
+from app.core.security import sha3_256_hex
 from app.main import app
 from app.services.bundle import dump_bundle
 from tests.helpers import auth_headers
@@ -17,6 +19,10 @@ INST2 = "inst2@test.com"
 JOINER = "joiner@test.com"
 OWNER = "owner@test.com"
 RESEARCHER = "researcher@test.com"
+COMMIT_CREATOR = sha3_256_hex("test-secret-creator")
+COMMIT_INST1 = sha3_256_hex("test-secret-inst1")
+COMMIT_INST2 = sha3_256_hex("test-secret-inst2")
+COMMIT_JOINER = sha3_256_hex("test-secret-joiner")
 
 
 def _h(email: str) -> dict[str, str]:
@@ -82,6 +88,7 @@ def test_create_study():
     assert r.status_code == 200
     data = r.json()
     assert "study_id" in data
+    assert data.get("invite_code")
     study_id = data["study_id"]
     r2 = client.get(f"/studies/{study_id}", headers=_h(CREATOR))
     assert r2.status_code == 200
@@ -126,6 +133,7 @@ def test_join_study():
     )
     assert r.status_code == 200
     study_id = r.json()["study_id"]
+    invite = r.json()["invite_code"]
     r_join = client.post(
         f"/studies/{study_id}/join",
         headers=_h(JOINER),
@@ -133,6 +141,8 @@ def test_join_study():
             "institution_email": JOINER,
             "institution_name": "Joiner Hospital",
             "public_key_share": "dummy_base64_key_placeholder",
+            "key_commitment": COMMIT_JOINER,
+            "invite_code": invite,
         },
     )
     assert r_join.status_code in (200, 400)
@@ -204,6 +214,7 @@ def test_request_and_approve_computation():
             "organization": "",
             "columns": '["col1"]',
             "declared_rows": "",
+            "allow_external_requests": "true",
         },
         files={"file": ("encrypted.bin", io.BytesIO(file_bytes), "application/octet-stream")},
     )
@@ -246,10 +257,12 @@ def test_full_multiparty_workflow():
             "allowed_algorithms": ["mean"],
             "column_definitions": [{"name": "x", "data_type": "float", "required": True}],
             "public_key_share": "dummy_key_creator",
+            "key_commitment": COMMIT_INST1,
         },
     )
     assert r.status_code == 200
     study_id = r.json()["study_id"]
+    invite = r.json()["invite_code"]
     r_proto = client.post(
         f"/studies/{study_id}/protocol/create",
         headers=_h(INST1),
@@ -274,6 +287,8 @@ def test_full_multiparty_workflow():
             "institution_email": INST2,
             "institution_name": "Inst 2",
             "public_key_share": "dummy_key_for_test",
+            "key_commitment": COMMIT_INST2,
+            "invite_code": invite,
         },
     )
     assert r_join.status_code == 200
@@ -361,13 +376,79 @@ def test_full_multiparty_workflow():
         json={"institution_email": INST1},
     )
     assert r_app.status_code == 200, r_app.text
-    r_share = client.post(
+    r_dummy = client.post(
         f"/studies/{study_id}/jobs/{job_id}/submit_decryption_share",
         headers=_h(INST1),
         json={"institution_email": INST1, "decryption_share": "dummy_share"},
+    )
+    assert r_dummy.status_code == 400
+    r_share = client.post(
+        f"/studies/{study_id}/jobs/{job_id}/submit_decryption_share",
+        headers=_h(INST1),
+        json={
+            "institution_email": INST1,
+            "decryption_share": expected_release_share(job_id, INST1, COMMIT_INST1),
+        },
     )
     assert r_share.status_code == 200, r_share.text
     body = r_share.json()
     assert body["status"] == "completed"
     assert body.get("encrypted") is True
     assert body.get("result_json", {}).get("encrypted") is True
+
+
+def test_public_key_requires_auth_and_membership():
+    r = client.post(
+        "/studies/create",
+        headers=_h(CREATOR),
+        json={
+            "name": "PK Study",
+            "description": "x",
+            "creator_email": CREATOR,
+            "institution_name": "H",
+            "threshold_t": 1,
+            "threshold_n": 1,
+            "allowed_algorithms": ["mean"],
+            "column_definitions": [],
+            "public_key_share": "",
+        },
+    )
+    assert r.status_code == 200
+    study_id = r.json()["study_id"]
+    r_unauth = client.get(f"/studies/{study_id}/public_key")
+    assert r_unauth.status_code == 401
+    r_stranger = client.get(f"/studies/{study_id}/public_key", headers=_h("stranger-pk@test.com"))
+    assert r_stranger.status_code == 403
+    r_ok = client.get(f"/studies/{study_id}/public_key", headers=_h(CREATOR))
+    assert r_ok.status_code == 200
+
+
+def test_join_without_invite_rejected():
+    r = client.post(
+        "/studies/create",
+        headers=_h(CREATOR),
+        json={
+            "name": "Invite Gate",
+            "description": "x",
+            "creator_email": CREATOR,
+            "institution_name": "H",
+            "threshold_t": 1,
+            "threshold_n": 2,
+            "allowed_algorithms": ["mean"],
+            "column_definitions": [],
+            "public_key_share": "",
+        },
+    )
+    study_id = r.json()["study_id"]
+    r_join = client.post(
+        f"/studies/{study_id}/join",
+        headers=_h(JOINER),
+        json={
+            "institution_email": JOINER,
+            "institution_name": "X",
+            "public_key_share": "k",
+            "key_commitment": COMMIT_JOINER,
+            "invite_code": "wrong-code",
+        },
+    )
+    assert r_join.status_code == 403

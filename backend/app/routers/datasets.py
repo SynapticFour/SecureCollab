@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
-"""Dataset upload, list, columns, accessible. Identity from X-User-Email."""
+"""Dataset upload, list, columns, accessible. Identity from signed access token."""
 from __future__ import annotations
 
 import json
@@ -50,6 +50,7 @@ async def datasets_upload(
     organization: str = Form(""),
     columns: str = Form("[]"),
     declared_rows: str = Form(""),
+    allow_external_requests: str = Form("false"),
     user: AuthUser = Depends(require_user),
 ):
     """Binary file + form fields. Owner is the authenticated user. JSON bundles only."""
@@ -82,8 +83,8 @@ async def datasets_upload(
                 raise HTTPException(status_code=400, detail="File size exceeds plausible range for declared columns/rows")
         except HTTPException:
             raise
-        except (ValueError, json.JSONDecodeError):
-            pass
+        except (ValueError, json.JSONDecodeError) as e:
+            raise HTTPException(status_code=400, detail="declared_rows/columns must be valid integers/JSON") from e
     file_path.parent.mkdir(parents=True, exist_ok=True)
     file_path.write_bytes(contents)
     columns_clean = "[]"
@@ -91,11 +92,12 @@ async def datasets_upload(
         arr = json.loads(columns)
         if isinstance(arr, list):
             columns_clean = json.dumps([str(x) for x in arr])
-    except (json.JSONDecodeError, TypeError):
-        pass
+    except (json.JSONDecodeError, TypeError) as e:
+        raise HTTPException(status_code=400, detail="columns must be a JSON array") from e
     name = sanitize_text(name, 200)
     description = sanitize_text(description, 2000)
     organization = sanitize_text(organization, 200)
+    allow_ext = allow_external_requests.strip().lower() in ("1", "true", "yes")
     with Session(engine) as session:
         dataset = Dataset(
             name=name,
@@ -104,6 +106,7 @@ async def datasets_upload(
             owner_email=user.email[:254],
             organization=organization or "",
             columns=columns_clean,
+            allow_external_requests=allow_ext,
         )
         session.add(dataset)
         session.commit()
@@ -113,11 +116,23 @@ async def datasets_upload(
 
 @router.get("/{dataset_id}/columns")
 def dataset_columns(dataset_id: int, user: AuthUser = Depends(require_user)):
-    """Return stored column names as array."""
+    """Return stored column names. Owner or requester of a completed job only."""
     with Session(engine) as session:
         dataset = session.get(Dataset, dataset_id)
         if not dataset:
             raise HTTPException(status_code=404, detail="Dataset nicht gefunden")
+        allowed = dataset.owner_email.lower() == user.email.lower()
+        if not allowed:
+            completed = session.exec(
+                select(Job).where(
+                    Job.dataset_id == dataset_id,
+                    Job.requester_email == user.email,
+                    Job.status == "completed",
+                )
+            ).first()
+            allowed = completed is not None
+        if not allowed:
+            raise HTTPException(status_code=403, detail="Not allowed to view this dataset")
         try:
             cols = json.loads(dataset.columns or "[]")
             return cols if isinstance(cols, list) else []

@@ -20,7 +20,7 @@ For wording around security, privacy, and compliance, see [`LEGAL_NOTES.md`](LEG
 
 Homomorphic Encryption (HE) allows computation on ciphertext. We use the CKKS scheme (via TenSEAL / Microsoft SEAL) because it supports approximate arithmetic on real numbers — means, regression, correlation — which is what clinical statistics need. The server never decrypts; it runs the same operations on encrypted vectors and returns encrypted sufficient statistics. Institutions finalize plaintext locally with their secret key.
 
-This prototype uses the **study creator's public key** to encrypt (not threshold DKG). Result "shares" are authorizations to *release* the encrypted blob, not cryptographic partial decrypts. A full t-of-n DKG is not implemented.
+This prototype uses the **study creator's public key** to encrypt (not threshold DKG). Result "shares" are authorizations to *release* the encrypted blob, checked as `SHA3-256(job_id|email|key_commitment)` against the value stored at join. They are not cryptographic partial decrypts. A full t-of-n DKG is not implemented.
 
 Cryptographic commitments are computed at upload: `SHA3-256(ciphertext || public_key_fingerprint || timestamp || institution)`. They prove which key was used and that the stored file matches what was uploaded. Anyone can verify this locally.
 
@@ -177,7 +177,7 @@ curl https://your-instance.com/system/integrity
 Returns `codebase_hash`, `git_commit`, and versions. Reproduce locally and compare:
 
 ```bash
-git clone https://github.com/SynapticFour/SecureCollab && cd securecollab
+git clone https://github.com/SynapticFour/SecureCollab && cd SecureCollab
 # Build or run integrity module; compare hash to codebase_hash from the response
 ```
 
@@ -187,9 +187,9 @@ Full steps (reproducible build, local hash computation): [VERIFY.md](VERIFY.md).
 
 The entire platform is open source, not only the crypto library. You can read every line that runs on your data. There is no external security audit yet; that is planned for Phase 2. Verification (codebase hash in every audit entry, reproducible builds, optional blockchain anchoring) is designed so you can check what ran — so trust is not required in the same way as with proprietary "trust us" systems.
 
-## Competitive Landscape
+## Scope vs other HE platforms
 
-Duality Technologies is the closest competitor: well-funded, strong academic founders (including a Turing Award recipient), existing institutional customers. Their crypto stack (OpenFHE) is open source; their platform is not. Differences: (1) We are fully open source — platform and SDK. (2) Codebase hash in every audit entry and planned blockchain anchoring make the running code and audit trail verifiable. (3) We target institutions that cannot afford enterprise contracts; Duality focuses on large enterprise deals.
+This repository is a research prototype (single maintainer, monthly satellite budget). It is not an enterprise HE platform and should not be compared to Duality or similar vendors as a substitute. Open-source platform + SDK and a codebase hash in audit entries are the concrete differences in this tree — not market position.
 
 ## Roadmap
 

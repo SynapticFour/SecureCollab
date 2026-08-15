@@ -13,11 +13,15 @@ from app.core.security import AuthUser, add_security_middleware, assert_actor, g
 from app.core.timeutils import audit_timestamp
 from app.database import Session, create_db_and_tables, engine
 from app.models import Dataset, Job
-from app.routers import datasets, jobs, participants, studies, system
+from app.routers import auth, datasets, jobs, participants, studies, system
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    from app.config import DEFAULT_SECRET_KEY
+
+    if settings.production and settings.secret_key == DEFAULT_SECRET_KEY:
+        raise RuntimeError("SECRET_KEY must be changed when SECURECOLLAB_PRODUCTION is set")
     settings.upload_dir_path.mkdir(parents=True, exist_ok=True)
     settings.studies_upload_dir_path.mkdir(parents=True, exist_ok=True)
     create_db_and_tables()
@@ -35,6 +39,7 @@ def create_app() -> FastAPI:
 
     add_security_middleware(app)
 
+    app.include_router(auth.router, prefix="/auth")
     app.include_router(studies.router, prefix="/studies")
     app.include_router(datasets.router, prefix="/datasets")
     app.include_router(jobs.router, prefix="/jobs")

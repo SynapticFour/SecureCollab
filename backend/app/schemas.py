@@ -21,12 +21,15 @@ class StudyCreate(BaseModel):
     allowed_algorithms: list[str] = []
     column_definitions: dict | list = []
     public_key_share: str = ""
+    key_commitment: str = ""
 
 
 class StudyJoin(BaseModel):
     institution_email: str
     institution_name: str
     public_key_share: str
+    key_commitment: str
+    invite_code: str
 
 
 class StudyRequestComputation(BaseModel):

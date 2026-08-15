@@ -5,7 +5,9 @@ Planned production-oriented features. Current state is Phase 1 (hobby / proof of
 ## Phase 1 (current)
 
 - HE core with TenSEAL (CKKS), FastAPI backend, study management
-- Threshold key generation (simplified), cryptographic commitments, hash-chained audit trail
+- **Creator public key** (not DKG). Release authorizations counted to t-of-n; shares are SHA3 commitments, not partial decrypts
+- Password + HMAC token auth (email not verified)
+- Cryptographic commitments, hash-chained audit trail
 - Client SDK, web UI, multi-party workflow
 - Algorithm set: descriptive statistics, correlation, group comparison, linear regression, distribution, multi-group, logistic approx, correlation matrix, survival approx, prevalence/risk, federated mean, subgroup analysis
 

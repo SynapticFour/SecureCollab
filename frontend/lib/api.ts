@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: Apache-2.0
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
-const EMAIL_STORAGE_KEY = "securecollab_user_email";
+const TOKEN_STORAGE_KEY = "securecollab_token";
 
 function authHeaders(extra?: Record<string, string>): HeadersInit {
   const headers: Record<string, string> = { ...(extra || {}) };
   if (typeof window !== "undefined") {
-    const email = window.localStorage.getItem(EMAIL_STORAGE_KEY)?.trim();
-    if (email) headers["X-User-Email"] = email;
+    const token = window.localStorage.getItem(TOKEN_STORAGE_KEY)?.trim();
+    if (token) headers["Authorization"] = `Bearer ${token}`;
   }
   return headers;
 }
@@ -32,6 +32,32 @@ function buildErrorMessage(payload: unknown, fallback: string): string {
     return `${fallback} (error_id: ${errorId})`;
   }
   return fallback;
+}
+
+export async function login(email: string, password: string): Promise<{ token: string; email: string }> {
+  const res = await fetch(`${API_BASE}/auth/login`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email, password }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(buildErrorMessage(err, "Login failed"));
+  }
+  return res.json();
+}
+
+export async function register(email: string, password: string): Promise<{ token: string; email: string }> {
+  const res = await fetch(`${API_BASE}/auth/register`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email, password }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(buildErrorMessage(err, "Registration failed"));
+  }
+  return res.json();
 }
 
 export type AlgorithmInfo = {
@@ -106,6 +132,7 @@ export type StudyDetail = {
   combined_public_key: string | null;
   protocol: { allowed_algorithms?: string[]; column_definitions?: unknown[] };
   created_by: string;
+  invite_code?: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -164,7 +191,7 @@ export async function createStudy(body: {
   allowed_algorithms: string[];
   column_definitions?: unknown[];
   public_key_share?: string;
-}): Promise<{ study_id: number }> {
+}): Promise<{ study_id: number; invite_code: string }> {
   const res = await fetch(`${API_BASE}/studies/create`, {
     method: "POST",
     headers: authHeaders({ "Content-Type": "application/json" }),
@@ -179,7 +206,13 @@ export async function createStudy(body: {
 
 export async function joinStudy(
   studyId: number,
-  body: { institution_email: string; institution_name: string; public_key_share: string }
+  body: {
+    institution_email: string;
+    institution_name: string;
+    public_key_share: string;
+    key_commitment: string;
+    invite_code: string;
+  }
 ): Promise<{ study_id: number; status: string }> {
   const res = await fetch(`${API_BASE}/studies/${studyId}/join`, {
     method: "POST",

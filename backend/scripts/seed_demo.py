@@ -7,6 +7,7 @@ Run from backend dir: python -m scripts.seed_demo (or python scripts/seed_demo.p
 from __future__ import annotations
 
 import json
+import secrets
 import uuid
 from pathlib import Path
 
@@ -41,6 +42,7 @@ DEMO_PARTICIPANT_EMAIL = "participant@test.com"
 DEMO_PARTICIPANT_NAME = "Demo Hospital B"
 DEMO_STUDY_NAME = "Demo Study"
 DEMO_STUDY_DESC = "Pre-seeded demo study for pilots and showcases."
+DEMO_PASSWORD = "demo-pass-change-me"
 REQUIRED_COLUMNS = [
     {"name": "value", "aliases": [], "data_type": "float", "required": True},
     {"name": "id", "aliases": ["subject_id"], "data_type": "float", "required": True},
@@ -58,6 +60,12 @@ def run_seed() -> dict:
     create_db_and_tables()
     settings.upload_dir_path.mkdir(parents=True, exist_ok=True)
     settings.studies_upload_dir_path.mkdir(parents=True, exist_ok=True)
+    from app.services.user_service import ensure_user
+
+    ensure_user(DEMO_CREATOR, DEMO_PASSWORD)
+    ensure_user(DEMO_PARTICIPANT_EMAIL, DEMO_PASSWORD)
+    creator_commit = sha3_256_hex("demo-secret-creator")
+    participant_commit = sha3_256_hex("demo-secret-participant")
 
     with Session(engine) as session:
         from sqlmodel import select
@@ -79,6 +87,7 @@ def run_seed() -> dict:
             threshold_n=2,
             threshold_t=2,
             created_by=DEMO_CREATOR,
+            invite_code=secrets.token_urlsafe(16),
         )
         session.add(study)
         session.commit()
@@ -90,6 +99,7 @@ def run_seed() -> dict:
             institution_name=DEMO_CREATOR_NAME,
             institution_email=DEMO_CREATOR,
             public_key_share="dummy_key_creator",
+            key_commitment=creator_commit,
             key_share_committed_at=utc_now(),
         )
         session.add(part1)
@@ -140,6 +150,7 @@ def run_seed() -> dict:
             institution_name=DEMO_PARTICIPANT_NAME,
             institution_email=DEMO_PARTICIPANT_EMAIL,
             public_key_share="dummy_key_participant",
+            key_commitment=participant_commit,
             key_share_committed_at=utc_now(),
         )
         session.add(part2)
@@ -256,7 +267,7 @@ def run_seed() -> dict:
         )
         session.commit()
 
-    return {"message": "Demo seed completed", "study_id": study_id}
+    return {"message": "Demo seed completed", "study_id": study_id, "demo_login": DEMO_CREATOR, "demo_password": DEMO_PASSWORD}
 
 
 if __name__ == "__main__":

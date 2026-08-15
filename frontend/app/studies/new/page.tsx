@@ -40,6 +40,7 @@ export default function NewStudyPage() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
   const [createdStudyId, setCreatedStudyId] = useState<number | null>(null);
+  const [createdInvite, setCreatedInvite] = useState("");
 
   const toggleAlgorithm = (id: string) => {
     setAllowedAlgorithms((prev) =>
@@ -63,7 +64,7 @@ export default function NewStudyPage() {
     setError("");
     setSubmitting(true);
     try {
-      const { study_id } = await createStudy({
+      const { study_id, invite_code } = await createStudy({
         name,
         description,
         creator_email: creatorEmail,
@@ -73,6 +74,7 @@ export default function NewStudyPage() {
         allowed_algorithms: allowedAlgorithms.length ? allowedAlgorithms : ALGORITHMS.map((a) => a.id),
       });
       setCreatedStudyId(study_id);
+      setCreatedInvite(invite_code || "");
       // Stay on the review step so that the user can copy instructions and then go to the dashboard.
       setStep(4);
     } catch (e) {
@@ -165,7 +167,7 @@ export default function NewStudyPage() {
               </div>
               <div>
                 <label className="block text-sm font-medium text-slate-700">
-                  How many institutions must approve decryption? (t)
+                  How many institutions must authorize release of the encrypted result? (t)
                 </label>
                 <input
                   type="range"
@@ -286,6 +288,12 @@ export default function NewStudyPage() {
                   <p className="font-semibold">Study created successfully.</p>
                   <p className="mt-1">
                     Study ID: <code className="font-mono text-xs">{createdStudyId}</code>
+                    {createdInvite ? (
+                      <>
+                        <br />
+                        Invite code: <code className="font-mono text-xs">{createdInvite}</code>
+                      </>
+                    ) : null}
                   </p>
                 </div>
                 <div>

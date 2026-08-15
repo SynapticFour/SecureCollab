@@ -112,11 +112,13 @@ def generate_key_share(institution_email: str, password: str) -> dict[str, Any]:
         raise CryptoError("Password must not be empty")
     public_ctx, secret_ctx = generate_contexts()
     key_fingerprint = _sha3(public_ctx)
+    key_commitment = _sha3(secret_ctx)
     public_b64 = base64.b64encode(public_ctx).decode("ascii")
     path = save_secret_key(secret_ctx, institution_email, password)
     return {
         "public_key_share": public_b64,
         "key_fingerprint": key_fingerprint,
+        "key_commitment": key_commitment,
         "secret_key_file": str(path),
     }
 

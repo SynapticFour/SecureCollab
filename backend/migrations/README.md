@@ -2,12 +2,15 @@
 
 # Migrations
 
-When you need schema changes:
+Local demo still uses `app.database.create_db_and_tables()` at API startup (SQLite).
 
-1. Install Alembic: `pip install alembic`
-2. Initialize: `alembic init migrations`
-3. Configure `alembic.ini` and `migrations/env.py` to use `app.database.engine` and `app.models`.
-4. Generate: `alembic revision --autogenerate -m "description"`
-5. Apply: `alembic upgrade head`
+For production schema:
 
-Until then, `app.database.create_db_and_tables()` and the ALTER TABLE fallbacks handle initial setup.
+```bash
+cd backend
+pip install alembic
+alembic upgrade head
+```
+
+New changes: `alembic revision --autogenerate -m "description"` then `alembic upgrade head`.
+Do not rely on the ALTER TABLE fallbacks in `database.py` for production.

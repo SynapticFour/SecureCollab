@@ -27,17 +27,19 @@ Key design decisions for SecureCollab.
 - **Institutions** run the SDK on their own machines; it must install with `pip install ./sdk` without pulling the full backend.
 - **Clear boundary:** Crypto and API client live in one package; the server never sees plaintext. Versioning the SDK independently allows safe upgrades.
 
-## Router/service split: why business logic is not in routers
+## Router/service split
 
-- **Routers** handle HTTP: validation, status codes, request/response shape. They call services and return results.
-- **Services** hold all TenSEAL, audit, integrity, and schema logic. They are testable without FastAPI and reusable from jobs or CLI.
-- **Single responsibility:** Changing an algorithm or the audit format does not touch route definitions.
+Routers still own HTTP orchestration for studies (create, join, activate, HE job). Shared crypto/auth lives in `app/core/` (`tokens`, `release`, `passwords`) and services (`he_service`, `bundle`, `user_service`). The studies router is large; treat it as the workflow facade, not as "thin HTTP".
 
-## Why config comes entirely from environment variables
+## Why config comes from environment variables
 
-- **12-factor app:** Config varies per environment; no hardcoded paths or secrets. Same image can run in dev/staging/prod.
-- **Secrets:** Keys and DB URLs are set in `.env` or the orchestrator; never in code or in repo.
-- **Pydantic Settings** validates types and required fields at startup and documents env names in one place.
+- **12-factor app:** Config varies per environment. Demo defaults exist in `app/config.py` (SQLite, `./uploads`, a documented dev `SECRET_KEY`).
+- **Secrets:** Production must set `SECRET_KEY` (HMAC for access tokens). The API refuses to start if `SECURECOLLAB_PRODUCTION` is set and the default secret is still in use.
+- **Pydantic Settings** validates types at startup.
+
+## Auth (implemented)
+
+Identity is a password-bound account plus an HMAC access token (`Authorization: Bearer`). Client-supplied `X-User-Email` is not identity. Email is not verified; do not use real institutional addresses on this prototype.
 
 ## Data flow: what is encrypted at each step
 

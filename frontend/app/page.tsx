@@ -6,12 +6,12 @@ export default function HomePage() {
     <main className="min-h-screen bg-primary text-white">
       <div className="mx-auto max-w-5xl px-6 py-20">
         <h1 className="text-4xl font-bold tracking-tight md:text-5xl">
-          Collaborate on sensitive clinical data without ever exposing it.
+          Research prototype: statistics on encrypted vectors
         </h1>
         <p className="mt-6 max-w-2xl text-lg text-slate-300">
-          SecureCollab enables pharma companies to share encrypted datasets and
-          researchers to run analyses on encrypted data. Results are computed
-          without ever decrypting the source—privacy by design.
+          SecureCollab demonstrates CKKS homomorphic encryption for multi-party
+          aggregates. The server never decrypts. This is not a production
+          clinical platform and does not implement threshold DKG.
         </p>
         <div className="mt-12 grid gap-8 md:grid-cols-3">
           <div className="flex flex-col items-center rounded-xl border border-white/10 bg-white/5 p-6 text-center">

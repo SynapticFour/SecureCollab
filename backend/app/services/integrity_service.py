@@ -47,8 +47,15 @@ def get_deployment_integrity() -> dict:
 
 
 def verify_codebase_hash(expected: str) -> dict:
-    """Compare against the startup-cached hash. Does not re-walk the tree."""
-    current = get_deployment_integrity()
+    """Re-walk the tree and compare to expected. Does not use the startup cache."""
+    if compute_codebase_hash is None:
+        return {
+            "verified": False,
+            "expected_hash": expected,
+            "current_hash": "unknown",
+            "error": "Integrity module unavailable",
+        }
+    current = compute_codebase_hash()
     current_hash = current.get("codebase_hash", "unknown")
     return {
         "verified": current_hash == expected,

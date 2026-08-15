@@ -41,3 +41,28 @@ def test_access_datasets_by_owner_empty():
 def test_access_datasets_requires_matching_header():
     r = client.get(f"/access/datasets/{EMAIL}", headers=auth_headers("other@example.com"))
     assert r.status_code == 403
+
+
+def test_dataset_columns_idor():
+    from tests.helpers import dummy_bundle_bytes
+    import io
+
+    r = client.post(
+        "/datasets/upload",
+        headers=auth_headers("owner-idor@test.com"),
+        data={
+            "name": "Private",
+            "description": "x",
+            "owner_email": "owner-idor@test.com",
+            "organization": "",
+            "columns": '["col1"]',
+            "declared_rows": "",
+        },
+        files={"file": ("encrypted.bin", io.BytesIO(dummy_bundle_bytes()), "application/octet-stream")},
+    )
+    assert r.status_code == 200
+    ds_id = r.json()["dataset_id"]
+    r2 = client.get(f"/datasets/{ds_id}/columns", headers=auth_headers("stranger@test.com"))
+    assert r2.status_code == 403
+    r3 = client.get(f"/datasets/{ds_id}/columns", headers=auth_headers("owner-idor@test.com"))
+    assert r3.status_code == 200

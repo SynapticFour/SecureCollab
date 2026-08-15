@@ -19,6 +19,7 @@ class Study(SQLModel, table=True):
     public_key_fingerprint: str = ""
     combined_public_key: str = ""
     created_by: str = ""
+    invite_code: str = ""
     created_at: datetime = Field(default_factory=utc_now)
     updated_at: datetime = Field(default_factory=utc_now)
 

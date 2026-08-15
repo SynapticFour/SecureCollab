@@ -232,6 +232,9 @@ export default function StudyDashboardPage() {
                 <div><dt className="text-slate-500">Threshold</dt><dd>{study.threshold_t} of {study.threshold_n} participants</dd></div>
                 <div><dt className="text-slate-500">Allowed algorithms</dt><dd>{allowedAlgos.join(", ") || "—"}</dd></div>
                 <div><dt className="text-slate-500">Participants</dt><dd>{(protocol?.participants?.length ?? 0)}</dd></div>
+                {study.invite_code ? (
+                  <div><dt className="text-slate-500">Invite code</dt><dd className="font-mono text-xs">{study.invite_code}</dd></div>
+                ) : null}
               </dl>
               {study.public_key_fingerprint && (
                 <div className="mt-4">
@@ -518,12 +521,12 @@ export default function StudyDashboardPage() {
       {decryptShareJobId !== null && (
         <Modal open onClose={() => setDecryptShareJobId(null)} title="Submit Decryption Share">
           <p className="text-sm text-slate-600">
-            Run the SecureCollab SDK locally to compute your decryption share, then paste the result below (or enter a placeholder for demo).
+            Run the SecureCollab SDK locally to compute your release share (SHA3 of job_id|email|key_commitment), then paste the hex digest. Placeholders are rejected.
           </p>
           <textarea
             value={decryptShareValue}
             onChange={(e) => setDecryptShareValue(e.target.value)}
-            placeholder="Base64 decryption share from SDK"
+            placeholder="64-char hex release share from SDK"
             className="mt-3 w-full rounded-lg border border-slate-300 p-2 font-mono text-sm"
             rows={3}
           />

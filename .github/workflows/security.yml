@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 name: Security Scan
 on:
+  pull_request:
   schedule:
     - cron: "0 9 * * 1"
   workflow_dispatch:

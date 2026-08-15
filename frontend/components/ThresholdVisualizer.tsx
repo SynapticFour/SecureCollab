@@ -2,7 +2,7 @@
 "use client";
 
 /**
- * Visual explanation of t-of-n threshold: how many institutions must approve decryption.
+ * Visual explanation of t-of-n authorization to release an encrypted result.
  */
 export function ThresholdVisualizer({
   t,
@@ -15,8 +15,10 @@ export function ThresholdVisualizer({
 }) {
   const defaultDesc = (
     <>
-      With t={t} of n={n}: Any {t} of {n} institutions can decrypt results together.
-      No single institution can decrypt alone. The platform can never decrypt.
+      With t={t} of n={n}: any {t} of {n} participants must authorize release of the
+      still-encrypted result blob. This is not threshold decryption. Only the
+      study creator&apos;s secret key can finalize plaintext locally. The server
+      never decrypts.
     </>
   );
 

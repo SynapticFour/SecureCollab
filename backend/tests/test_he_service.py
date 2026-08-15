@@ -129,3 +129,12 @@ def test_ciphertext_size_reasonable():
     bundle, _secret = _make_simple_bundle([1.0, 2.0, 3.0] * 10)
     raw = bundle["vectors"]["col1"]
     assert len(raw) < 10 * 1024 * 1024, "Ciphertext should be under 10 MB for small vector"
+
+
+def test_combine_encrypted_results_single_and_empty():
+    from app.services.he_service import combine_encrypted_results
+
+    one = {"encrypted": True, "algorithm": "mean", "n": 3, "public_context": "YQ==", "ciphertexts": {"sum": "Yg=="}, "plain_meta": {}}
+    assert combine_encrypted_results([one]) == one
+    with pytest.raises(ValueError):
+        combine_encrypted_results([])

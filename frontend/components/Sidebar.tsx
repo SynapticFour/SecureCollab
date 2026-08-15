@@ -17,7 +17,7 @@ export function Sidebar({
   extraAction?: { href: string; label: string };
 }) {
   const pathname = usePathname();
-  const { email } = useEmail();
+  const { email, logout } = useEmail();
 
   return (
     <aside className="flex h-screen w-56 flex-col border-r border-slate-200 bg-primary">
@@ -55,6 +55,11 @@ export function Sidebar({
       <div className="border-t border-white/10 p-3">
         <p className="truncate text-xs text-slate-400">Signed in as</p>
         <p className="truncate text-sm font-medium text-white">{email || "—"}</p>
+        {email ? (
+          <button type="button" onClick={logout} className="mt-1 text-xs text-slate-400 underline">
+            Sign out
+          </button>
+        ) : null}
       </div>
     </aside>
   );

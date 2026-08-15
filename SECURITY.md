@@ -30,8 +30,8 @@ SecureCollab relies on the following cryptographic building blocks:
 
 ## Dependency Policy (security only)
 
-- Dependencies are pinned in `backend/requirements.txt` (exact or minimal compatible versions).
-- We run **pip-audit** (or equivalent) regularly (e.g. via CI) to check for known CVEs.
+- Dependencies are pinned in `backend/requirements.txt` (exact versions for the main stack).
+- We run **pip-audit** on pull requests and weekly (security.yml).
 - Updates are applied after review; security-relevant patches are prioritised.
 
 ## External audits (planned, not completed)
@@ -46,25 +46,16 @@ SecureCollab relies on the following cryptographic building blocks:
 
 **Honest statement:** This project has not yet undergone an independent external security audit or legal review. The above measures describe technical mechanisms and do not replace a formal security or compliance assessment for high-assurance deployments. Institutions should obtain their own expert advice for their specific use case.
 
-## Lightweight auth & roles for pilots (no production guarantee)
+## Prototype auth (not SSO)
 
-For demos and small pilots, SecureCollab supports a **header-based, lightweight auth/role model**:
+Accounts are email + password (PBKDF2). After login the API issues an HMAC-SHA256 access token signed with `SECRET_KEY`. Mutating routes require `Authorization: Bearer <token>`. `X-User-Email` is not identity.
 
-- Clients can send an `X-User-Email` header.
-- The backend maps this email to a simple role based on configuration lists (`admin_emails`, `provider_emails`, `researcher_emails`) in `app.config.settings`.
-- Example (environment variables, to be adapted per deployment):
-  - `ADMIN_EMAILS=admin1@example.com,admin2@example.com`
-  - `PROVIDER_EMAILS=provider@example.com`
-  - `RESEARCHER_EMAILS=researcher@example.com`
+- Email addresses are **not verified**. Do not register real institutional mailboxes on a public instance.
+- Roles (`admin_emails`, …) still apply to the token subject. `/system/config-summary` is admin-only.
+- Production (`SECURECOLLAB_PRODUCTION=1`) refuses to start with the documented development `SECRET_KEY`.
+- This is not a substitute for institutional IdP/SSO. HSTS is enabled when production is set **or** `SECRET_KEY` is not the development default.
 
-Important:
-
-- This is designed for **controlled pilots** and internal demos, not as a full auth system.
-- It does **not** implement passwords, SSO, MFA, token expiry or session management.
-- It is not a substitute for institutional identity management (IdP, SSO, etc.).
-- For a production deployment, institutions should integrate with their own auth/SSO and enforce roles according to their policies.
-
-Currently, mutating API routes require `X-User-Email`. Body fields such as `requester_email` / `institution_email` must match that header. `/system/config-summary` is additionally restricted to the `admin` role. HSTS is enabled when `SECURECOLLAB_PRODUCTION` is set **or** `SECRET_KEY` is not the documented development default. Database and upload paths accept both `DATABASE_URL`/`UPLOAD_DIR` and `SECURECOLLAB_DATABASE_URL`/`SECURECOLLAB_UPLOADS_DIR`.
+Result release shares are `SHA3-256(job_id|email|key_commitment)` and must match the commitment stored at join. Arbitrary strings (`dummy_share`) are rejected. Shares are still authorizations, not CKKS partial decrypts.
 
 ## Monitoring and logging (operator responsibility)
 

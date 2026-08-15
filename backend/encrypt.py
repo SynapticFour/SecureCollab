@@ -3,13 +3,18 @@
 """Encrypt a CSV locally. The secret key is never written into the .bin."""
 from __future__ import annotations
 
+import base64
 import csv
 import json
+import os
 import sys
 from collections import defaultdict
 from pathlib import Path
 
 import tenseal as ts
+from cryptography.fernet import Fernet
+from cryptography.hazmat.primitives import hashes as crypto_hashes
+from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 
 from app.services.bundle import dump_bundle
 
@@ -68,7 +73,17 @@ def main() -> None:
     context.generate_galois_keys()
     context.global_scale = 2**40
     secret_path = out_path.with_suffix(".secret")
-    secret_path.write_bytes(context.serialize(save_secret_key=True))
+    raw_secret = context.serialize(save_secret_key=True)
+    password = (sys.argv[3] if len(sys.argv) >= 4 else "").strip()
+    if not password:
+        raise SystemExit(
+            "Fehler: Passwort als drittes Argument erforderlich "
+            "(secret is Fernet-wrapped; never written in plaintext)."
+        )
+    salt = os.urandom(16)
+    kdf = PBKDF2HMAC(algorithm=crypto_hashes.SHA256(), length=32, salt=salt, iterations=600_000)
+    key = base64.urlsafe_b64encode(kdf.derive(password.encode("utf-8")))
+    secret_path.write_bytes(b"SCF1" + salt + Fernet(key).encrypt(raw_secret))
     try:
         secret_path.chmod(0o600)
     except OSError:

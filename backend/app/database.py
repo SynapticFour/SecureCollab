@@ -22,6 +22,7 @@ from app.models import (  # noqa: F401 – register all models with SQLModel.met
     StudyParticipant,
     StudyProtocol,
     SyntheticSubmission,
+    User,
 )
 
 connect_args = {"check_same_thread": False} if SQLITE_URL.startswith("sqlite") else {}
@@ -67,6 +68,9 @@ def create_db_and_tables():
             ("jobs", "study_id", "INTEGER", "NULL"),
             ("jobs", "parameters", "TEXT", "'{}'"),
             ("jobs", "result_commitment", "TEXT", "NULL"),
+            ("studies", "invite_code", "TEXT", "''"),
+            ("study_participants", "key_commitment", "TEXT", "''"),
+            ("datasets", "allow_external_requests", "BOOLEAN", "0"),
         ]:
             try:
                 conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {col} {typ} DEFAULT {default}"))

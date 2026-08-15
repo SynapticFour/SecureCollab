@@ -33,6 +33,6 @@ securecollab verify-audit --study-id 1 --url http://localhost:8000 --email you@o
 
 `python backend/sdk.py …` still works; it is a shim to this package.
 
-HTTP calls send `X-User-Email` and use a 30s timeout. Secret-key files are
+HTTP calls send `Authorization: Bearer` after `POST /auth/login` and use a 30s timeout. Secret-key files are
 Fernet-wrapped (PBKDF2); empty passwords and XOR fallbacks are refused.
 """

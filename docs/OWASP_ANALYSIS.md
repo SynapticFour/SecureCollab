@@ -1,6 +1,6 @@
 # OWASP Security Analysis
 
-Periodic review of SecureCollab against OWASP Top 10 and related checks. Last updated: 2025-02.
+Periodic review of SecureCollab against OWASP Top 10 and related checks. Last updated: 2026-08-15.
 
 ---
 
@@ -8,9 +8,9 @@ Periodic review of SecureCollab against OWASP Top 10 and related checks. Last up
 
 | Check | Status | Notes |
 |-------|--------|------|
-| Study/Job/Dataset access by ID | OK | `X-User-Email` required; study routes check participant membership; job approve/reject is owner-only. |
+| Study/Job/Dataset access by ID | Partial | Bearer token required. Study routes check participant membership. Job approve/reject is owner-only. Dataset columns are owner or completed-job requester. Join requires `invite_code`. |
 | File path traversal | OK | `secure_filename()` and `resolve()` + `relative_to(uploads)` prevent path traversal on uploads. |
-| Direct object reference | Mitigated | IDs are integers; no sensitive data in URL. Rate limiting on upload/approve reduces enumeration. |
+| Direct object reference | Partial | Integer IDs. Unauthenticated `public_key` removed. Rate limiting on upload/approve. |
 
 ---
 
@@ -39,8 +39,8 @@ Periodic review of SecureCollab against OWASP Top 10 and related checks. Last up
 
 | Check | Status | Notes |
 |-------|--------|------|
-| Rate limiting | OK | slowapi on upload (10/h), job request (30/h), approve (60/h), integrity (100/h). |
-| Computation queue | Partial | `MAX_CONCURRENT_COMPUTATIONS` documented; full FIFO queue not implemented. |
+| Rate limiting | Partial | slowapi on upload/job/auth; `RateLimitExceeded` handler registered. No per-tenant quota. |
+| Computation queue | Partial | `MAX_CONCURRENT_COMPUTATIONS` + timeout; full FIFO queue not implemented. |
 
 ---
 
@@ -49,8 +49,8 @@ Periodic review of SecureCollab against OWASP Top 10 and related checks. Last up
 | Check | Status | Notes |
 |-------|--------|------|
 | Security headers | OK | X-Content-Type-Options, X-Frame-Options, X-XSS-Protection, CSP; HSTS in production. |
-| CORS | OK | Configurable via `ALLOWED_ORIGINS`; no wildcard in production when set. |
-| Default credentials | OK | No default passwords; `SECRET_KEY` has dev default only (documented). |
+| CORS | Partial | Configurable via `ALLOWED_ORIGINS`; methods/headers allowlisted (not `*`). |
+| Default credentials | Fail-closed in production | Dev `SECRET_KEY` default is refused when `SECURECOLLAB_PRODUCTION` is set. |
 
 ---
 
@@ -58,8 +58,8 @@ Periodic review of SecureCollab against OWASP Top 10 and related checks. Last up
 
 | Check | Status | Notes |
 |-------|--------|------|
-| Pinned versions | OK | `requirements.txt` pins exact versions. |
-| CVE scanning | OK | GitHub Actions `pip-audit` (security.yml) and optional npm audit. |
+| Pinned versions | Partial | `requirements.txt` pins exact versions for the main stack. SDK `pyproject.toml` still uses ranges. |
+| CVE scanning | Partial | GitHub Actions `pip-audit` on PR+schedule (`security.yml`). Dependency-review fails closed. |
 
 ---
 
@@ -67,8 +67,8 @@ Periodic review of SecureCollab against OWASP Top 10 and related checks. Last up
 
 | Check | Status | Notes |
 |-------|--------|------|
-| Authentication | N/A (Phase 0) | No user auth; identity is email/institution in request. Phase 1 should add auth. |
-| Session/secret key | OK | No server-side sessions; SDK secret key stored with password-derived encryption. |
+| Authentication | Partial (prototype) | Password accounts + HMAC Bearer tokens. Email is not verified. Not SSO/OIDC. |
+| Session/secret key | Partial | `SECRET_KEY` signs access tokens. SDK secret key stored with password-derived Fernet. |
 
 ---
 
@@ -77,7 +77,7 @@ Periodic review of SecureCollab against OWASP Top 10 and related checks. Last up
 | Check | Status | Notes |
 |-------|--------|------|
 | Audit chain | OK | Hash-chained; tampering detectable. |
-| Codebase hash | OK | In audit and `/system/integrity`; deterministic. |
+| Codebase hash | Partial | Startup cache for `/system/integrity`; `/system/integrity/verify` re-walks the tree. |
 | Pickle integrity | Mitigated | Bundles from participants; consider HMAC or structure validation. |
 
 ---
@@ -105,7 +105,7 @@ Periodic review of SecureCollab against OWASP Top 10 and related checks. Last up
 | Item | Location | Action |
 |------|----------|--------|
 | Legacy entrypoint | `backend/main.py` | Deprecation shim re-exporting `app.main:app`. Prefer `uvicorn app.main:app`. |
-| Custom exceptions | `app/core/exceptions.py` | `ValidationError`, `NotFoundError`, `AlgorithmNotAllowedError` defined but not used. Reserved for future; or use in routers and map to HTTP in handler. |
+| Custom exceptions | `app/core/exceptions.py` | `AlgorithmNotAllowedError` / `NotFoundError` mapped to HTTP in the global handler. |
 
 ---
 
@@ -119,6 +119,6 @@ Periodic review of SecureCollab against OWASP Top 10 and related checks. Last up
 
 ## Recommendations
 
-1. **Pickle:** Validate deserialized bundle structure (required keys, types) before passing to HE; reject malformed payloads.
-2. **Auth (Phase 1):** Add authentication and enforce “participant of study” for study-scoped actions.
+1. **IdP/OIDC:** Replace password accounts with institutional SSO before any non-lab deploy.
+2. **Threshold DKG:** Release shares are authorizations, not partial decrypts. Implement real DKG or drop remaining threshold wording.
 3. **Computation queue:** Implement FIFO queue when `MAX_CONCURRENT_COMPUTATIONS` is reached; set job status to `queued` until a slot is free.

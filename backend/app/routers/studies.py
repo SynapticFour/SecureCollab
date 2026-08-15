@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
-"""Study endpoints. Identity from X-User-Email. HE compute never decrypts."""
+"""Study endpoints. Identity from signed access token. HE compute never decrypts."""
 from __future__ import annotations
 
 import base64
@@ -7,6 +7,7 @@ import csv
 import io
 import json
 import logging
+import secrets
 import uuid
 from pathlib import Path
 
@@ -20,6 +21,7 @@ from app.config import (
     STUDIES_UPLOADS_DIR,
 )
 from app.core.algorithms import ALGORITHM_REGISTRY
+from app.core.release import expected_release_share, is_key_commitment, shares_match
 from app.core.security import AuthUser, assert_actor, rate_limit, require_user, sha3_256_hex
 from app.core.timeutils import audit_timestamp, utc_now
 from app.database import Session, engine
@@ -195,6 +197,7 @@ def studies_get(study_id: int, user: AuthUser = Depends(require_user)):
             "combined_public_key": study.combined_public_key if study.status == "active" else None,
             "protocol": protocol,
             "created_by": study.created_by,
+            "invite_code": study.invite_code if study.created_by.lower() == user.email.lower() else None,
             "created_at": _ts(study.created_at),
             "updated_at": _ts(study.updated_at),
         }
@@ -204,6 +207,9 @@ def studies_get(study_id: int, user: AuthUser = Depends(require_user)):
 @rate_limit("30/hour")
 def studies_create(request: Request, body: StudyCreate, user: AuthUser = Depends(require_user)):
     assert_actor(user, body.creator_email)
+    commitment = (body.key_commitment or "").strip().lower()
+    if commitment and not is_key_commitment(commitment):
+        raise HTTPException(status_code=400, detail="key_commitment must be 64 lowercase hex chars")
     protocol = {
         "allowed_algorithms": body.allowed_algorithms,
         "column_definitions": body.column_definitions,
@@ -217,6 +223,7 @@ def studies_create(request: Request, body: StudyCreate, user: AuthUser = Depends
             threshold_n=body.threshold_n,
             threshold_t=min(body.threshold_t, body.threshold_n),
             created_by=user.email,
+            invite_code=secrets.token_urlsafe(16),
         )
         session.add(study)
         session.commit()
@@ -226,7 +233,8 @@ def studies_create(request: Request, body: StudyCreate, user: AuthUser = Depends
             institution_name=body.institution_name,
             institution_email=user.email,
             public_key_share=body.public_key_share or "",
-            key_share_committed_at=utc_now() if body.public_key_share else None,
+            key_commitment=commitment,
+            key_share_committed_at=utc_now() if (body.public_key_share or commitment) else None,
         )
         session.add(part)
         session.commit()
@@ -237,7 +245,8 @@ def studies_create(request: Request, body: StudyCreate, user: AuthUser = Depends
         session.commit()
         return {
             "study_id": study.id,
-            "instructions": "Create and finalize protocol (POST /studies/{id}/protocol/create, then /protocol/finalize). Then share study_id for others to join.",
+            "invite_code": study.invite_code,
+            "instructions": "Share invite_code with participants. They join via POST /studies/{id}/join.",
         }
 
 
@@ -328,6 +337,11 @@ def studies_join(request: Request, study_id: int, body: StudyJoin, user: AuthUse
             raise HTTPException(status_code=404, detail="Study nicht gefunden")
         if study.status == "active":
             raise HTTPException(status_code=400, detail="Study ist bereits aktiv")
+        if not study.invite_code or body.invite_code.strip() != study.invite_code:
+            raise HTTPException(status_code=403, detail="Invalid or missing invite_code")
+        commitment = (body.key_commitment or "").strip().lower()
+        if not is_key_commitment(commitment):
+            raise HTTPException(status_code=400, detail="key_commitment must be SHA3-256 hex of the local secret context")
         sp = session.exec(select(StudyProtocol).where(StudyProtocol.study_id == study_id)).first()
         if sp and sp.status != "finalized":
             raise HTTPException(status_code=400, detail="Study kann erst Teilnehmer aufnehmen, wenn das Protocol finalisiert ist. Creator muss protocol/finalize aufrufen.")
@@ -339,6 +353,7 @@ def studies_join(request: Request, study_id: int, body: StudyJoin, user: AuthUse
             institution_name=body.institution_name,
             institution_email=user.email,
             public_key_share=body.public_key_share,
+            key_commitment=commitment,
             key_share_committed_at=utc_now(),
         )
         session.add(part)
@@ -375,12 +390,13 @@ def studies_join(request: Request, study_id: int, body: StudyJoin, user: AuthUse
 
 
 @router.get("/{study_id}/public_key")
-def studies_public_key(study_id: int):
-    """Public encryption key for the study (creator's key in this prototype)."""
+def studies_public_key(study_id: int, user: AuthUser = Depends(require_user)):
+    """Public encryption key for the study (creator's key in this prototype). Participants only."""
     with Session(engine) as session:
         study = session.get(Study, study_id)
         if not study:
             raise HTTPException(status_code=404, detail="Study nicht gefunden")
+        _require_participant(session, study_id, user.email)
         datasets = list(session.exec(select(StudyDataset).where(StudyDataset.study_id == study_id)))
         return {
             "combined_public_key": study.combined_public_key,
@@ -743,7 +759,7 @@ def studies_job_submit_decryption_share(
             raise HTTPException(status_code=404, detail="Study oder Job nicht gefunden")
         if job.status != "awaiting_decryption":
             raise HTTPException(status_code=400, detail=f"Job hat status {job.status}")
-        _require_participant(session, study_id, user.email)
+        participant = _require_participant(session, study_id, user.email)
         existing = session.exec(
             select(JobDecryptionShare).where(
                 JobDecryptionShare.job_id == job_id,
@@ -752,6 +768,11 @@ def studies_job_submit_decryption_share(
         ).first()
         if existing:
             raise HTTPException(status_code=400, detail="Decryption Share bereits eingereicht")
+        if not is_key_commitment(participant.key_commitment):
+            raise HTTPException(status_code=400, detail="Participant has no key_commitment; re-join is required")
+        expected = expected_release_share(job_id, user.email, participant.key_commitment)
+        if not shares_match(body.decryption_share, expected):
+            raise HTTPException(status_code=400, detail="Invalid release share")
         session.add(JobDecryptionShare(
             job_id=job_id,
             institution_email=user.email,

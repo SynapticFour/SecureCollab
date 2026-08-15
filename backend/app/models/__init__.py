@@ -4,6 +4,7 @@ from app.models.audit import AuditLog
 from app.models.dataset import Dataset
 from app.models.job import Job, JobApproval, JobDecryptionShare
 from app.models.participant import StudyParticipant
+from app.models.user import User
 from app.models.study import (
     ProtocolColumn,
     SchemaSubmission,
@@ -26,4 +27,5 @@ __all__ = [
     "ProtocolColumn",
     "SchemaSubmission",
     "SyntheticSubmission",
+    "User",
 ]

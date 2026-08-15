@@ -1,11 +1,13 @@
 # SPDX-License-Identifier: Apache-2.0
-"""All configuration via environment variables (12-factor). No hardcoded values."""
+"""Configuration from environment variables (12-factor). Defaults are for local demos only."""
 from __future__ import annotations
 
 from pathlib import Path
 
 from pydantic import AliasChoices, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+DEFAULT_SECRET_KEY = "dev-secret-key-change-in-production"
 
 
 class Settings(BaseSettings):
@@ -36,7 +38,7 @@ class Settings(BaseSettings):
         validation_alias=AliasChoices("max_upload_size_mb", "MAX_UPLOAD_SIZE_MB", "SECURECOLLAB_MAX_UPLOAD_MB"),
     )
     secret_key: str = Field(
-        default="dev-secret-key-change-in-production",
+        default=DEFAULT_SECRET_KEY,
         min_length=16,
         validation_alias=AliasChoices("secret_key", "SECRET_KEY", "SECURECOLLAB_SECRET_KEY"),
     )
@@ -82,6 +84,17 @@ class Settings(BaseSettings):
         description="Emails treated as researchers in pilot auth",
         validation_alias=AliasChoices("researcher_emails", "RESEARCHER_EMAILS"),
     )
+    allow_register: bool = Field(
+        default=True,
+        description="Allow POST /auth/register. Disable in production after provisioning users.",
+        validation_alias=AliasChoices("allow_register", "SECURECOLLAB_ALLOW_REGISTER"),
+    )
+    token_ttl_seconds: int = Field(
+        default=86400,
+        ge=300,
+        le=7 * 24 * 3600,
+        validation_alias=AliasChoices("token_ttl_seconds", "SECURECOLLAB_TOKEN_TTL_SECONDS"),
+    )
     # Planned (unused): blockchain anchoring. Kept so operators can set secrets
     # without code changes when the feature lands. Do not treat as active.
     polygon_rpc_url: str | None = Field(
@@ -111,7 +124,7 @@ class Settings(BaseSettings):
     def production(self) -> bool:
         if self.production_flag:
             return True
-        return self.secret_key != "dev-secret-key-change-in-production"
+        return self.secret_key != DEFAULT_SECRET_KEY
 
 
 settings = Settings()

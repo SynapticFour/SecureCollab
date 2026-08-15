@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
-"""Job request, approve, reject, result, list. Identity from X-User-Email."""
+"""Job request, approve, reject, result, list. Identity from signed access token."""
 from __future__ import annotations
 
 import json
@@ -66,6 +66,9 @@ def jobs_request(request: Request, body: JobRequest, user: AuthUser = Depends(re
         dataset = session.get(Dataset, body.dataset_id)
         if not dataset:
             raise HTTPException(status_code=404, detail="Dataset nicht gefunden")
+        owner = dataset.owner_email.lower() == user.email.lower()
+        if not owner and not dataset.allow_external_requests:
+            raise HTTPException(status_code=403, detail="This dataset does not accept external job requests")
         job = Job(
             dataset_id=body.dataset_id,
             requester_email=user.email,

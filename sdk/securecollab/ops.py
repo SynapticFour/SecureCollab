@@ -154,11 +154,12 @@ def compute_decryption_share(
     institution_email: str,
     api_base_url: str,
     password: str | None = None,
+    token: str = "",
 ) -> dict[str, Any]:
-    """Submit an authorization share to release the encrypted result.
+    """Submit an authorization share bound to the local secret-context commitment.
 
-    This is not a cryptographic partial decrypt. The secret key is loaded only
-    to prove the institution still holds it; the share itself is an attestation.
+    This is not a cryptographic partial decrypt. The server recomputes
+    SHA3-256(job_id|email|key_commitment) and rejects mismatches.
     """
     if not _secret_key_path(institution_email).exists():
         return {
@@ -176,21 +177,20 @@ def compute_decryption_share(
             "job_id": job_id,
             "error": "Entschlüsselung des Secret Keys fehlgeschlagen (falsches Passwort?).",
         }
-    share_fingerprint = _sha3(secret_ctx)[:32]
-    payload = f"{job_id}{institution_email}{share_fingerprint}{datetime.now(timezone.utc).isoformat()}"
-    share_bytes = _sha3(payload).encode("ascii")
-    decryption_share_b64 = base64.b64encode(share_bytes).decode("ascii")
+    commitment = _sha3(secret_ctx)
+    decryption_share = _sha3(f"{int(job_id)}|{institution_email.strip().lower()}|{commitment}")
     try:
         api_post(
             api_base_url,
             f"/studies/{study_id}/jobs/{job_id}/submit_decryption_share",
-            data={"institution_email": institution_email, "decryption_share": decryption_share_b64},
+            data={"institution_email": institution_email, "decryption_share": decryption_share},
             email=institution_email,
+            token=token,
         )
     except (HTTPError, URLError) as e:
         return {"share_submitted": False, "job_id": job_id, "error": str(e)}
     write_local_audit(institution_email, "decryption_share_submitted", {"study_id": study_id, "job_id": job_id})
-    return {"share_submitted": True, "job_id": job_id}
+    return {"share_submitted": True, "job_id": job_id, "key_commitment": commitment}
 
 
 def generate_study_report(study_id: str, api_base_url: str, institution_email: str = "") -> str:

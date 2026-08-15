@@ -16,4 +16,5 @@ class Dataset(SQLModel, table=True):
     owner_email: str
     columns: str = "[]"
     organization: str = ""
+    allow_external_requests: bool = False
     created_at: datetime = Field(default_factory=utc_now)
