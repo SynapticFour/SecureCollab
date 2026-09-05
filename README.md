@@ -1,5 +1,18 @@
 # SecureCollab
 
+> **Development paused (2026-09).** This repository is parked.
+>
+> It is **not Ferrum**, not Solum, not the GA4GH released join, and not a Synaptic Four product SKU.
+>
+> **What this is:** a research proof of concept for multi-party statistics on
+> homomorphically encrypted (TenSEAL/CKKS) datasets. It is not production-ready
+> for patient data and is not a clinical product.
+>
+> Phase 2–3 items in [ROADMAP.md](ROADMAP.md) (Polygon, marketplace, genomics)
+> are parked ideas, not in-flight work.
+>
+> Do not treat this tree as Ferrum evidence or as a compliance certificate.
+
 Multi-party clinical data analysis using Homomorphic Encryption — compute statistics across encrypted datasets from multiple institutions without any party seeing each other's raw data.
 
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)

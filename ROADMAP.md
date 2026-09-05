@@ -1,5 +1,9 @@
 # Roadmap
 
+> **Parked (2026-09 freeze).** Phases 2–3 below are historical intent, not a
+> schedule and not in-flight work. This repository is a research proof of
+> concept. It is not Ferrum, not Solum, and not for production patient data.
+
 Planned production-oriented features. Current state is Phase 1 (hobby / proof of concept).
 
 ## Phase 1 (current)
