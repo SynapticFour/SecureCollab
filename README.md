@@ -1,18 +1,5 @@
 # SecureCollab
 
-> This repository is archived.
->
-> It is **not Ferrum**, not Solum, not the GA4GH released join, and not a Synaptic Four product SKU.
->
-> **What this is:** a research proof of concept for multi-party statistics on
-> homomorphically encrypted (TenSEAL/CKKS) datasets. It is not production-ready
-> for patient data and is not a clinical product.
->
-> Phase 2–3 items in [ROADMAP.md](ROADMAP.md) (Polygon, marketplace, genomics)
-> are parked ideas, not in-flight work.
->
-> Do not treat this tree as Ferrum evidence or as a compliance certificate.
-
 Multi-party clinical data analysis using Homomorphic Encryption — compute statistics across encrypted datasets from multiple institutions without any party seeing each other's raw data.
 
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
@@ -22,8 +9,6 @@ Multi-party clinical data analysis using Homomorphic Encryption — compute stat
 ## Status
 
 This is a Synaptic Four research prototype / proof of concept. It demonstrates the intended cryptographic concept with real HE (TenSEAL/CKKS), a working multi-party workflow, and a usable web UI. It has not undergone a formal security audit or legal review. It is not production-ready for real patient data and does not constitute legal advice or a compliance assessment. Production use is blocked until a security audit and migration discipline (Alembic) are in place.
-
-**Maintenance budget:** fenced satellite (org L2). Default eng attention = **monthly** audit/CI hygiene only — no feature work unless a named conversation needs it. See Synaptic Four business `strategy/org-level-up/SATELLITE-FENCING.md`.
 
 Planned production-oriented features: [ROADMAP.md](ROADMAP.md).
 
