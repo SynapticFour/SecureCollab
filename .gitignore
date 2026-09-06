@@ -54,6 +54,7 @@ logs/
 # Generated artifacts and caches
 .svelte-kit/
 .astro/
+.coverage
 coverage/
 dist/
 build/
