@@ -83,7 +83,7 @@ It is **not** legal advice and does **not** replace consultation with qualified 
 - Always make clear:
   - The project is currently a **hobby / proof-of-concept**.
   - It has **no external security audit** and **no legal review** yet.
-  - It is **not production-ready for real patient data**.
+  - It is **not for real patient data**.
 
 ### 3.2 No legal advice
 
@@ -149,4 +149,3 @@ Preferred wording:
   - product,
   - legal/compliance,
   - and security review.
-

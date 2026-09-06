@@ -35,4 +35,4 @@ Use synapticfour-infra `infrastructure.yml` with `action: destroy` for the `secu
 
 ## Status
 
-Proof of concept — not production-ready for real patient data. See [LEGAL_NOTES.md](../LEGAL_NOTES.md).
+Proof of concept — not for real patient data. See [LEGAL_NOTES.md](../LEGAL_NOTES.md).
