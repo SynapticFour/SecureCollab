@@ -9,12 +9,15 @@ import uuid
 from dataclasses import dataclass
 from pathlib import Path
 
+from typing import Any
+
 from fastapi import FastAPI, HTTPException, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from app.core.tokens import TokenError, parse_access_token
 
+_limiter: Any = None
 try:
     from slowapi import Limiter
     from slowapi.util import get_remote_address
@@ -27,8 +30,6 @@ try:
     def rate_limit(s: str):
         return _limiter.limit(s)
 except ImportError:
-    _limiter = None
-
     def get_limiter():
         return None
 
@@ -92,7 +93,7 @@ def add_security_middleware(app: FastAPI) -> None:
             from slowapi import _rate_limit_exceeded_handler
 
             app.state.limiter = limiter
-            app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+            app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)  # type: ignore[arg-type]
         except ImportError:
             pass
 

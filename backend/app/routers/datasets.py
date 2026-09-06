@@ -5,9 +5,10 @@ from __future__ import annotations
 import json
 import uuid
 from pathlib import Path
+from typing import Any
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
-from sqlmodel import select
+from sqlmodel import col, select
 
 from app.config import (
     ALLOWED_UPLOAD_EXTENSIONS,
@@ -147,7 +148,7 @@ def datasets_list(user: AuthUser = Depends(require_user)):
         rows = session.exec(select(Dataset).where(Dataset.owner_email == user.email)).all()
         out = []
         for d in rows:
-            item = {
+            item: dict[str, Any] = {
                 "id": d.id,
                 "name": d.name,
                 "description": d.description,
@@ -170,13 +171,13 @@ def datasets_accessible(requester_email: str, user: AuthUser = Depends(require_u
     with Session(engine) as session:
         stmt = (
             select(Dataset)
-            .join(Job, Job.dataset_id == Dataset.id)
+            .join(Job, col(Job.dataset_id) == col(Dataset.id))
             .where(Job.requester_email == user.email, Job.status == "completed")
             .distinct()
         )
         result = []
         for d in session.exec(stmt).all():
-            item = {
+            item: dict[str, Any] = {
                 "id": d.id,
                 "name": d.name,
                 "description": d.description,

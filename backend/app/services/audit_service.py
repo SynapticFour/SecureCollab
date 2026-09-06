@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 
-from sqlmodel import Session, select
+from sqlmodel import Session, col, select
 
 from app.config import INITIAL_HASH
 from app.core.security import sha3_256_hex
@@ -25,7 +25,7 @@ def write_audit_log(
     details_with_integrity = {**details, "codebase_hash": codebase_hash}
     last = (
         session.exec(
-            select(AuditLog).where(AuditLog.study_id == study_id).order_by(AuditLog.id.desc()).limit(1)
+            select(AuditLog).where(AuditLog.study_id == study_id).order_by(col(AuditLog.id).desc()).limit(1)
         ).first()
         if study_id is not None
         else None

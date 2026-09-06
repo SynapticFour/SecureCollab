@@ -12,7 +12,7 @@ import uuid
 from pathlib import Path
 
 from fastapi import APIRouter, Body, Depends, File, Form, HTTPException, Request, UploadFile
-from sqlmodel import select
+from sqlmodel import col, select
 
 from app.config import (
     ALLOWED_UPLOAD_EXTENSIONS,
@@ -141,22 +141,22 @@ def studies_list(participant_email: str = "", user: AuthUser = Depends(require_u
         studies = [s for s in (session.get(Study, sid) for sid in study_ids) if s is not None]
         if not studies:
             return []
-        ids = [s.id for s in studies]
+        ids = [s.id for s in studies if s.id is not None]
         from sqlalchemy import func
         part_counts = {r[0]: r[1] for r in session.exec(
-            select(StudyParticipant.study_id, func.count(StudyParticipant.id))
-            .where(StudyParticipant.study_id.in_(ids))
-            .group_by(StudyParticipant.study_id)
+            select(StudyParticipant.study_id, func.count(col(StudyParticipant.id)))
+            .where(col(StudyParticipant.study_id).in_(ids))
+            .group_by(col(StudyParticipant.study_id))
         ).all()}
         ds_counts = {r[0]: r[1] for r in session.exec(
-            select(StudyDataset.study_id, func.count(StudyDataset.id))
-            .where(StudyDataset.study_id.in_(ids))
-            .group_by(StudyDataset.study_id)
+            select(StudyDataset.study_id, func.count(col(StudyDataset.id)))
+            .where(col(StudyDataset.study_id).in_(ids))
+            .group_by(col(StudyDataset.study_id))
         ).all()}
         pending_counts = {r[0]: r[1] for r in session.exec(
-            select(Job.study_id, func.count(Job.id))
-            .where(Job.study_id.in_(ids), Job.status == "pending_approval")
-            .group_by(Job.study_id)
+            select(Job.study_id, func.count(col(Job.id)))
+            .where(col(Job.study_id).in_(ids), Job.status == "pending_approval")
+            .group_by(col(Job.study_id))
         ).all()}
         return [
             {
@@ -166,9 +166,9 @@ def studies_list(participant_email: str = "", user: AuthUser = Depends(require_u
                 "status": study.status,
                 "threshold_n": study.threshold_n,
                 "threshold_t": study.threshold_t,
-                "participant_count": part_counts.get(study.id, 0),
-                "dataset_count": ds_counts.get(study.id, 0),
-                "pending_approvals": pending_counts.get(study.id, 0),
+                "participant_count": part_counts.get(study.id, 0) if study.id is not None else 0,
+                "dataset_count": ds_counts.get(study.id, 0) if study.id is not None else 0,
+                "pending_approvals": pending_counts.get(study.id, 0) if study.id is not None else 0,
                 "created_at": _ts(study.created_at),
             }
             for study in studies
@@ -261,9 +261,12 @@ def studies_protocol_create(study_id: int, body: ProtocolCreate, user: AuthUser 
         existing = session.exec(select(StudyProtocol).where(StudyProtocol.study_id == study_id)).first()
         if existing:
             raise HTTPException(status_code=400, detail="Protocol existiert bereits für diese Study")
-        required_columns = [c.model_dump() if hasattr(c, "model_dump") else c for c in body.required_columns]
+        required_columns = [
+            c.model_dump() if hasattr(c, "model_dump") else dict(c)
+            for c in body.required_columns
+        ]
         for c in required_columns:
-            if isinstance(c, dict) and "valid_range" not in c and ("valid_range_min" in c or "valid_range_max" in c):
+            if "valid_range" not in c and ("valid_range_min" in c or "valid_range_max" in c):
                 c["valid_range"] = [c.get("valid_range_min"), c.get("valid_range_max")]
         payload_str = protocol_payload_for_hash(required_columns, body.minimum_rows, body.missing_value_strategy)
         protocol_hash = sha3_256_hex(payload_str)
@@ -279,8 +282,7 @@ def studies_protocol_create(study_id: int, body: ProtocolCreate, user: AuthUser 
         session.add(sp)
         session.commit()
         session.refresh(sp)
-        for c in body.required_columns:
-            cd = c.model_dump() if hasattr(c, "model_dump") else c
+        for cd in required_columns:
             valid_range = cd.get("valid_range") or []
             vmin = valid_range[0] if len(valid_range) > 0 else cd.get("valid_range_min")
             vmax = valid_range[1] if len(valid_range) > 1 else cd.get("valid_range_max")
@@ -805,7 +807,7 @@ def studies_audit_trail(study_id: int, user: AuthUser = Depends(require_user)):
         if not study:
             raise HTTPException(status_code=404, detail="Study nicht gefunden")
         _require_participant(session, study_id, user.email)
-        entries = list(session.exec(select(AuditLog).where(AuditLog.study_id == study_id).order_by(AuditLog.id)))
+        entries = list(session.exec(select(AuditLog).where(AuditLog.study_id == study_id).order_by(col(AuditLog.id))))
         return [
             {
                 "id": e.id,
@@ -830,7 +832,7 @@ def studies_protocol(study_id: int, user: AuthUser = Depends(require_user)):
         participants = list(session.exec(select(StudyParticipant).where(StudyParticipant.study_id == study_id)))
         datasets = list(session.exec(select(StudyDataset).where(StudyDataset.study_id == study_id)))
         jobs = list(session.exec(select(Job).where(Job.study_id == study_id)))
-        audit_entries = list(session.exec(select(AuditLog).where(AuditLog.study_id == study_id).order_by(AuditLog.id)))
+        audit_entries = list(session.exec(select(AuditLog).where(AuditLog.study_id == study_id).order_by(col(AuditLog.id))))
         try:
             protocol_data = json.loads(study.protocol or "{}")
         except (json.JSONDecodeError, TypeError):

@@ -5,7 +5,7 @@ from __future__ import annotations
 from contextlib import asynccontextmanager
 
 from fastapi import Depends, FastAPI
-from sqlmodel import select
+from sqlmodel import col, select
 
 from app.config import settings
 from app.core.algorithms import ALGORITHM_REGISTRY
@@ -58,13 +58,15 @@ def create_app() -> FastAPI:
         with Session(engine) as session:
             stmt = (
                 select(Dataset.id, Dataset.name, Job.requester_email, Job.created_at)
-                .join(Job, Job.dataset_id == Dataset.id)
+                .join(Job, col(Job.dataset_id) == col(Dataset.id))
                 .where(Dataset.owner_email == user.email, Job.status == "completed")
-                .order_by(Dataset.id, Job.created_at.asc())
+                .order_by(col(Dataset.id), col(Job.created_at).asc())
             )
             rows = session.exec(stmt).all()
             by_ds: dict[int, dict] = {}
             for ds_id, ds_name, email, created_at in rows:
+                if ds_id is None:
+                    continue
                 bucket = by_ds.setdefault(ds_id, {"dataset_id": ds_id, "dataset_name": ds_name, "researchers": {}, "order": []})
                 if email not in bucket["researchers"]:
                     bucket["researchers"][email] = created_at

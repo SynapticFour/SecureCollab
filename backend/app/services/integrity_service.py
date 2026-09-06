@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable
 
 from app.core.timeutils import audit_timestamp, utc_now
 
@@ -10,6 +11,7 @@ logger = logging.getLogger("securecollab")
 
 _DEPLOYMENT_INTEGRITY: dict = {}
 
+compute_codebase_hash: Callable[[], dict] | None
 try:
     from integrity import compute_codebase_hash
 except Exception as e:

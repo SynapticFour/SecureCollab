@@ -7,7 +7,7 @@ import logging
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException, Request
-from sqlmodel import select
+from sqlmodel import col, select
 
 from app.core.algorithms import ALGORITHM_REGISTRY
 from app.core.security import AuthUser, assert_actor, rate_limit, require_user
@@ -179,7 +179,7 @@ def jobs_pending_by_owner(owner_email: str, user: AuthUser = Depends(require_use
     """Pending jobs for datasets owned by the authenticated user."""
     assert_actor(user, owner_email)
     with Session(engine) as session:
-        stmt = select(Job).join(Dataset, Job.dataset_id == Dataset.id).where(
+        stmt = select(Job).join(Dataset, col(Job.dataset_id) == col(Dataset.id)).where(
             Dataset.owner_email == user.email, Job.status == "pending"
         )
         jobs = session.exec(stmt).all()

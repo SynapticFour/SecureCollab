@@ -627,7 +627,7 @@ def finalize_encrypted_result(secret_context_bytes: bytes, result: dict[str, Any
     if alg == "pearson_correlation_matrix":
         cols = list(meta.get("columns") or [])
         means = {c: d(f"{c}__sum") / n for c in cols}
-        matrix = {c: {} for c in cols}
+        matrix: dict[str, dict[str, float]] = {c: {} for c in cols}
         pairs = []
         for i, ca in enumerate(cols):
             matrix[ca][ca] = 1.0
