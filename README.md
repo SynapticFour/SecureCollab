@@ -1,28 +1,26 @@
 # SecureCollab
 
-Multi-party clinical data analysis using Homomorphic Encryption — compute statistics across encrypted datasets from multiple institutions without any party seeing each other's raw data.
+A proof piece about encryption, not for patient data.
+
+For someone reading a homomorphic-encryption demonstration on synthetic or test data.
+
+**Status: No public status recorded yet.** The claims registry has no entry for this repository.
 
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
 
-> **Legal notice:** This repository documents technical capabilities and operating guidance. It is not legal advice and does not by itself provide regulatory certification or compliance guarantees. Compliance outcomes depend on operator configuration, contracts, and organisational controls.
+The banner in `frontend/app/layout.tsx` says the same limit: synthetic or test data only, no formal security or legal review, and do not upload real patient data.
 
-## Status
+> This repository documents technical capabilities and operating guidance. It is not legal advice and does not by itself provide regulatory certification or compliance guarantees.
 
-Research prototype with a working HE (TenSEAL/CKKS) multi-party workflow and web UI. A formal security audit is still ahead — please treat it as a demonstration of the cryptographic idea.
+## What it does
 
-Planned next steps: [ROADMAP.md](ROADMAP.md).
+Homomorphic encryption computes on ciphertext. This prototype uses the CKKS scheme, via TenSEAL and Microsoft SEAL, because CKKS supports approximate arithmetic on real numbers: means, regression, and correlation. The server does not decrypt. It runs the same operations on encrypted vectors and returns encrypted sufficient statistics. An institution finalizes plaintext locally with its secret key.
 
-For wording around security, privacy, and compliance, see [`LEGAL_NOTES.md`](LEGAL_NOTES.md). It provides communication guardrails for technical documentation and explicit caveats.
+Encryption uses the study creator's public key. That is not threshold distributed key generation. A "share" is an authorization to release the encrypted blob, checked as `SHA3-256(job_id|email|key_commitment)` against the value stored at join. It is not a cryptographic partial decrypt. A full t-of-n distributed key generation is not implemented.
 
-## How it works
+A commitment at upload is `SHA3-256(ciphertext || public_key_fingerprint || timestamp || institution)`. It records which key was used and that the stored file matches the upload. A reader can check that locally.
 
-Homomorphic Encryption (HE) allows computation on ciphertext. We use the CKKS scheme (via TenSEAL / Microsoft SEAL) because it supports approximate arithmetic on real numbers — means, regression, correlation — which is what clinical statistics need. The server never decrypts; it runs the same operations on encrypted vectors and returns encrypted sufficient statistics. Institutions finalize plaintext locally with their secret key.
-
-This prototype uses the **study creator's public key** to encrypt (not threshold DKG). Result "shares" are authorizations to *release* the encrypted blob, checked as `SHA3-256(job_id|email|key_commitment)` against the value stored at join. They are not cryptographic partial decrypts. A full t-of-n DKG is not implemented.
-
-Cryptographic commitments are computed at upload: `SHA3-256(ciphertext || public_key_fingerprint || timestamp || institution)`. They prove which key was used and that the stored file matches what was uploaded. Anyone can verify this locally.
-
-The audit trail is append-only and hash-chained. Each entry includes the hash of the previous one; tampering breaks the chain. Blockchain anchoring (Polygon) is planned so the trail root is published on-chain and the platform cannot alter history.
+The audit trail is append-only and hash-chained. Each entry includes the hash of the previous one. A later change breaks the chain. Publishing the trail root on a chain is listed as planned in [ROADMAP.md](ROADMAP.md). It is not implemented here.
 
 ```
   Institution A          Institution B
@@ -46,165 +44,109 @@ The audit trail is append-only and hash-chained. Each entry includes the hash of
        (neither saw the other's data)
 ```
 
-## Cryptographic properties (design goals)
+### Designed to ensure
 
-**Designed to ensure (no legal guarantee):**
+These are design goals. They are not a legal guarantee.
 
-- Raw data is never decrypted on the server.
-- Private key shares never leave the institution's machine (SDK runs locally).
-- Every operation is recorded in a tamper-evident audit log (hash chain).
-- Commitment hashes prove which key was used for each upload.
-- Codebase hash is computed at startup and included in every audit entry; you can verify what code ran via `GET /system/integrity`.
+- Raw data is not decrypted on the server.
+- The secret key stays on the institution's machine. The SDK runs locally.
+- Every operation is recorded in a hash-chained audit log.
+- Commitment hashes record which key was used for each upload.
+- A codebase hash is computed at startup and included in every audit entry. `GET /system/integrity` returns `codebase_hash`, `git_commit`, and versions. The steps to reproduce the hash are in [VERIFY.md](VERIFY.md).
 
-**Not guaranteed (honest):**
-
-- No formal security proof of the full system.
-- No external audit yet (planned for Phase 2).
-- CKKS is approximate — results have small floating-point errors; documented per algorithm.
-- Side-channel attacks are not mitigated at hardware level (TEE planned for Phase 2).
-
-## What the platform operator can see
+### What the operator can see
 
 | Can see | Cannot see |
 |---------|------------|
-| Encrypted datasets (ciphertexts) | Raw data (patient data, measurements) |
-| Metadata (file sizes, timestamps, institution names) | Private key shares (stay on each institution's machine) |
-| Audit trail entries (actions, not contents) | Decrypted results before explicit release by all participants |
+| Encrypted datasets (ciphertexts) | Raw data |
+| Metadata (file sizes, timestamps, institution names) | Secret keys (they stay on each institution's machine) |
+| Audit trail entries (actions, not contents) | Decrypted results before every participant has authorized release |
 | Commitment hashes | Which values are in a dataset |
 | Combined public key fingerprint | |
 | Encrypted intermediate results | |
 
-The right column reflects the intended cryptographic design. Under the stated model and assuming correct implementation and deployment, it should be infeasible in practice for the operator to see those things, but this is not a legal or absolute guarantee.
+The right column is the intended cryptographic design. Under that model, and assuming a correct implementation and deployment, those values stay hidden from the operator. That is not a legal or absolute guarantee. The wording guardrail is [LEGAL_NOTES.md](LEGAL_NOTES.md).
 
-## Quickstart
+The statistics, the inputs, and the approximate times are in [docs/ALGORITHMS.md](docs/ALGORITHMS.md).
 
-**Prerequisites:** Docker (recommended), or Python 3.11 + Node.js 18+ for split dev
+## Limits
 
-### One command (Docker — full stack)
+- The interface is for synthetic or test data. It is not for patient data. `frontend/app/layout.tsx` says so. `backend/encrypt.py` reads `sample_clinical_data.csv` as the local example file.
+- There is no formal security audit. [ROADMAP.md](ROADMAP.md) still lists one as later work.
+- CKKS is approximate. Results have small floating-point errors. The notes are per algorithm in [docs/ALGORITHMS.md](docs/ALGORITHMS.md).
+- Side-channel attacks are not mitigated in hardware. A trusted execution environment is planned, not present.
+- There is no formal security proof of the full system.
+- This repository is a single-maintainer research prototype with a monthly satellite budget. It is not an enterprise homomorphic-encryption platform, and it is not a substitute for Duality or a similar vendor. The concrete differences in this tree are the open-source platform and SDK, and a codebase hash in the audit entries.
+- GitHub may report this repository's licence as not asserted. The file in the tree is Apache-2.0.
+- A green test run is not a certificate and not a clinical pilot.
+
+## Quick start
+
+Prerequisites: Docker. Or Python 3.11 and Node.js 18 or newer for the split path.
 
 ```bash
 git clone https://github.com/SynapticFour/SecureCollab
 cd SecureCollab
 make up
-# Frontend: http://localhost:3000  ·  Backend: http://localhost:8000
 ```
 
-| Goal | Command |
-|------|---------|
-| Stop; **keep data** | `make down` |
-| Remove volumes | `make destroy` |
+You should see the frontend at `http://localhost:3000` and the backend at `http://localhost:8000`. Stop and keep data with `make down`. Remove volumes with `make destroy`.
 
-### Manual dev (two terminals)
+The split path, and the encrypt example, are in [docs/GETTING-STARTED.md](docs/GETTING-STARTED.md).
 
-```bash
-# Clone
-git clone https://github.com/SynapticFour/SecureCollab
-cd SecureCollab
+## Deployment
 
-# Backend
-cd backend
-python3.11 -m venv .venv && source .venv/bin/activate   # Windows: .venv\Scripts\activate
-pip install -r requirements.txt
-uvicorn app.main:app --reload
-```
+Image build and an optional deploy dispatch are in [`.github/workflows/ghcr-infra.yml`](.github/workflows/ghcr-infra.yml). The workflow pushes:
 
-In another terminal:
+- `ghcr.io/synapticfour/securecollab-backend:<tag>`
+- `ghcr.io/synapticfour/securecollab-frontend:<tag>`
 
-```bash
-# Frontend
-cd frontend
-npm install && npm run dev
-# Open http://localhost:3000
-```
+When `INFRA_DISPATCH_TOKEN` is set, the workflow posts a deploy event for app name `securecollab`. The operator repository is not linked from this page. The local matrix is [docs/deployment/README.md](docs/deployment/README.md). The domain named there is `securecollab.synapticfour.tech`.
 
-Create a study at http://localhost:3000/studies/new. For a single-institution demo you can upload an encrypted dataset from the study dashboard (use the SDK to encrypt locally first, or run the backend scripts):
+## Documentation
 
-```bash
-cd backend
-source .venv/bin/activate
-python encrypt.py sample_clinical_data.csv
-# Then upload the generated encrypted.bin via the UI (Study → Datasets) or POST /datasets/upload
-```
+### Tutorial
 
-Full local dev and SDK usage: [DOCUMENTATION.md](DOCUMENTATION.md#lokale-entwicklung).
+- [Getting started](docs/GETTING-STARTED.md)
 
-## Deployment (synapticfour-infra)
+### How-to guides
 
-Production deployment is orchestrated by `synapticfour-infra` with a dedicated app slot:
+- [Deployment notes](docs/DEPLOYMENT.md)
+- [Deployment matrix](docs/deployment/README.md)
+- [Local development](DOCUMENTATION.md)
+- [Verify a running instance](VERIFY.md)
 
-- app name: `securecollab`
-- domain: `securecollab.synapticfour.tech`
+### Reference
 
-Local deployment matrix: **[docs/deployment/README.md](docs/deployment/README.md)**.
+- [Algorithms](docs/ALGORITHMS.md)
+- [For evaluators](docs/FOR-EVALUATORS.md)
+- [Legal notes](LEGAL_NOTES.md)
+- [Security](SECURITY.md)
+- [Changelog](CHANGELOG.md)
 
-- deploy event: `deploy-app` with `client_payload.app_name=securecollab`
-- image repos:
-  - `ghcr.io/synapticfour/securecollab-backend:<tag>`
-  - `ghcr.io/synapticfour/securecollab-frontend:<tag>`
+### Explanation
 
-Use workflow `.github/workflows/ghcr-infra.yml` to build and push both images and dispatch infra deployment.
+- [Architecture](docs/ARCHITECTURE.md)
+- [Cryptography](docs/CRYPTOGRAPHY.md)
+- [Roadmap](ROADMAP.md)
 
-## Algorithms
+The full index is [docs/README.md](docs/README.md).
 
-| Algorithm | Inputs | Approx. time (1k rows) | Clinical use case |
-|-----------|--------|------------------------|-------------------|
-| Descriptive Statistics | 1 numeric column | 2 s | First data exploration |
-| Correlation | 2 columns | 2 s | Association between two markers |
-| Group Comparison | 1 column (split by index) | 2 s | Treatment vs control |
-| Linear Regression | 2 columns (predictor, target) | 2 s | Predict one variable from another |
-| Distribution | 1 column | 1 s | Rough distribution shape |
-| Mean (legacy) | 1 column | 1 s | Simple aggregate |
-| Multi-Group Comparison | 1 value column + optional mask columns | 5 s | Treatment vs control vs placebo |
-| Logistic Regression (approx) | Features + binary target | 4 s | Treatment response screening (exploratory only) |
-| Pearson Correlation Matrix | 2–6 columns | 8 s | GWAS-style correlation matrix |
-| Survival Analysis (approx) | Time + event columns | 3 s | Survival / hazard (rough estimate) |
-| Prevalence and Risk | Outcome + exposure (binary) | 3 s | Epidemiology, risk factors |
-| Federated Mean Aggregation | 1 value column, optional weight | 2 s | Meta-analysis across institutions |
-| Subgroup Analysis | Value column + binary mask columns | 6 s | Subgroup efficacy |
+## Licence
 
-Times are estimates on a typical single core; CKKS operations are CPU-bound.
+This repository is Apache License 2.0. The file is [LICENSE](LICENSE).
 
-## Verify the code
+## Cite
 
-Check what code is running on a deployed instance:
+Use [CITATION.cff](CITATION.cff). Prefer that file over a hand-copied line.
 
-```bash
-curl https://your-instance.com/system/integrity
-```
+## Website
 
-Returns `codebase_hash`, `git_commit`, and versions. Reproduce locally and compare:
+- Open source: [https://synapticfour.com/en/opensource/](https://synapticfour.com/en/opensource/)
+- Technical profile: [https://synapticfour.com/en/technical/code/](https://synapticfour.com/en/technical/code/)
 
-```bash
-git clone https://github.com/SynapticFour/SecureCollab && cd SecureCollab
-# Build or run integrity module; compare hash to codebase_hash from the response
-```
+The same pages exist in German (`/de/opensource/`, `/de/technik/code/`) and in French (`/fr/opensource/`, `/fr/technique/code/`).
 
-Full steps (reproducible build, local hash computation): [VERIFY.md](VERIFY.md).
-
-## Trust Model
-
-The entire platform is open source, not only the crypto library. You can read every line that runs on your data. There is no external security audit yet; that is planned for Phase 2. Verification (codebase hash in every audit entry, reproducible builds, optional blockchain anchoring) is designed so you can check what ran — so trust is not required in the same way as with proprietary "trust us" systems.
-
-## Scope vs other HE platforms
-
-This repository is a research prototype (single maintainer, monthly satellite budget). It is not an enterprise HE platform and should not be compared to Duality or similar vendors as a substitute. Open-source platform + SDK and a codebase hash in audit entries are the concrete differences in this tree — not market position.
-
-## Roadmap
-
-[ROADMAP.md](ROADMAP.md) — Phase 1 (current), Phase 2 (first institutional users, audit, TEE, blockchain anchoring), Phase 3 (scaling, genomics, marketplace).
-
-## License
-
-Apache 2.0 — see [LICENSE](LICENSE).
-
-## Contributing
-
-Security issues: please report to contact@synapticfour.com (responsible disclosure), not as a public GitHub issue. For other contributions: open an issue or pull request as usual.
-
-## Support
-
-For collaboration and deployment inquiries, contact [contact@synapticfour.com](mailto:contact@synapticfour.com).
-
----
+The map of repositories: [profile/README.md](https://github.com/SynapticFour/.github/blob/main/profile/README.md).
 
 Contact: [contact@synapticfour.com](mailto:contact@synapticfour.com)

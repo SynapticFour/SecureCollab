@@ -2,9 +2,9 @@
 
 | Scenario | Method | Doc |
 |----------|--------|-----|
-| **Local (one command)** | `make up` | [README](../README.md) |
-| Local (manual dev) | Backend + frontend terminals | [DOCUMENTATION.md](../DOCUMENTATION.md) |
-| **Production** | synapticfour-infra `compose_stack` | [README § Deployment](../README.md#deployment-synapticfour-infra) |
+| **Local (one command)** | `make up` | [README](../../README.md) |
+| Local (manual dev) | Backend + frontend terminals | [DOCUMENTATION.md](../../DOCUMENTATION.md) |
+| **Production** | workflow in this repository | [README § Deployment](../../README.md#deployment) |
 
 ## Prerequisites
 
@@ -25,14 +25,12 @@ Secondary: `./scripts/stack.sh up|down|destroy`, `docker compose -f infra/docker
 
 - App catalog entry: `securecollab`
 - Domain: `securecollab.synapticfour.tech`
-- Dispatch: GitHub Actions `workflow_dispatch` on [synapticfour-infra](https://github.com/SynapticFour/synapticfour-infra)
-
-See synapticfour-infra `terraform/apps/securecollab/` and product README.
+- Dispatch: `.github/workflows/ghcr-infra.yml` posts a deploy event when `INFRA_DISPATCH_TOKEN` is set. The operator tree names `terraform/apps/securecollab/`. This page does not link that other repository.
 
 ## Tear down (production)
 
-Use synapticfour-infra `infrastructure.yml` with `action: destroy` for the `securecollab` app — **manual only**, not automated on push.
+Tear-down uses that operator tree's `infrastructure.yml` with `action: destroy` for the `securecollab` app. It is manual only, not automated on push. This page does not link that repository.
 
 ## Status
 
-Proof of concept — not for real patient data. See [LEGAL_NOTES.md](../LEGAL_NOTES.md).
+Proof of concept — not for real patient data. See [LEGAL_NOTES.md](../../LEGAL_NOTES.md).

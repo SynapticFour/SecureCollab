@@ -1,5 +1,7 @@
 # Architecture
 
+The design notes for this repository are in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+
 This repository uses a modular structure with clear ownership boundaries and explicit integration points.
 
 ## Reference map
