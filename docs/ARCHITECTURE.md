@@ -9,7 +9,7 @@ Key design decisions for SecureCollab.
 - **Async support** for I/O-bound operations (file uploads, external calls later).
 - **OpenAPI out of the box** for SDK and frontend code generation.
 - **Lightweight** and easy to wrap in a thin app factory for testing and deployment.
-- **Type hints** and Pydantic integrate well with our config and request/response models.
+- **Type hints** and Pydantic integrate well with the config and request/response models.
 
 ## Why SQLite for Phase 0, PostgreSQL for Phase 1
 
@@ -20,7 +20,7 @@ Key design decisions for SecureCollab.
 
 - **Floating point:** Clinical and GWAS data are continuous (lab values, dosages). CKKS supports approximate arithmetic on reals.
 - **TFHE** is for exact integer/binary circuits; better for discrete logic, worse for statistics and regression.
-- **Performance:** CKKS is orders of magnitude faster for large vectors; we need to run many scalar ops per column.
+- **Performance:** CKKS is orders of magnitude faster for large vectors; the prototype runs many scalar operations per column.
 
 ## Why the SDK is a separate installable package
 
