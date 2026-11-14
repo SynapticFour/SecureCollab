@@ -76,7 +76,7 @@ The statistics, the inputs, and the approximate times are in [docs/ALGORITHMS.md
 - CKKS is approximate. Results have small floating-point errors. The notes are per algorithm in [docs/ALGORITHMS.md](docs/ALGORITHMS.md).
 - Side-channel attacks are not mitigated in hardware. A trusted execution environment is planned, not present.
 - There is no formal security proof of the full system.
-- This repository is a research prototype. It is not an enterprise homomorphic-encryption platform.
+- This repository is a single-maintainer research prototype with a monthly satellite budget. It is not an enterprise homomorphic-encryption platform, and it is not a substitute for Duality or a similar vendor. The concrete differences in this tree are the open-source platform and SDK, and a codebase hash in the audit entries.
 - GitHub may report this repository's licence as not asserted. The file in the tree is Apache-2.0.
 - A green test run is not a certificate and not a clinical pilot.
 
